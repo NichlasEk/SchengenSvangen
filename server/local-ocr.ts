@@ -76,7 +76,8 @@ function valueAfter(blocks: ExtractedText[], label: string): ExtractedText | und
   const rightLimit = rightLabel?.evidence.bounds?.x ?? Infinity;
   return blocks.filter(b => b !== anchor && b.evidence.bounds && b.evidence.confidence >= .80 &&
     b.evidence.bounds.x >= box.x - 8 && b.evidence.bounds.x < rightLimit - 8 &&
-    b.evidence.bounds.y > box.y + box.height && b.evidence.bounds.y < box.y + box.height + 36)
+    b.evidence.bounds.y >= box.y + box.height - 4 && b.evidence.bounds.y < box.y + box.height + 36 &&
+    b.evidence.bounds.y + b.evidence.bounds.height >= box.y + box.height + 6)
     .sort((a, b) => (a.evidence.bounds!.y - b.evidence.bounds!.y) || (a.evidence.bounds!.x - b.evidence.bounds!.x))[0];
 }
 export function parsePrescriberCandidates(blocks: ExtractedText[]): PrescriberCandidate[] {
@@ -95,11 +96,13 @@ export function parsePrescriberCandidates(blocks: ExtractedText[]): PrescriberCa
     if (first) evidence.firstName = first.evidence;
     if (last) evidence.lastName = last.evidence;
     if (street && postCode && city) evidence.address = { ...street.evidence, confidence: Math.min(street.evidence.confidence, postCode.evidence.confidence, city.evidence.confidence) };
-    if (prescriberPhone) evidence.phone = prescriberPhone.evidence;
+    // The official form asks for a contact number. Use the explicitly labelled
+    // workplace number only when the direct prescriber number is empty.
+    if (prescriberPhone || workplacePhone) evidence.phone = (prescriberPhone ?? workplacePhone)!.evidence;
     return { id: documentId, documentId, prescriber: {
       firstName: first?.text ?? '', lastName: last?.text ?? '',
       address: street && postCode && city ? `${street.text}, ${postCode.text} ${city.text}` : '',
-      phone: prescriberPhone?.text ?? '',
+      phone: prescriberPhone?.text ?? workplacePhone?.text ?? '',
     }, workplaceName: workplaceName?.text ?? '', workplacePhone: workplacePhone?.text ?? '', evidence };
   });
 }

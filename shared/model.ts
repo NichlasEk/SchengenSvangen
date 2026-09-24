@@ -12,12 +12,13 @@ export type Medication = {
   totalActiveSubstance: string; treatmentDays: string; notes: string;
   prescriber: Prescriber;
   prescriberCandidateId: string | null;
+  prescriberSourceIds: Partial<Record<keyof Prescriber, string>>;
   confidence: Confidence; classification: Classification;
 };
 export function blankMedication(id: string): Medication {
   return { id, originalText: '', productName: '', strength: '', form: '', activeSubstance: '', atcCode: '',
     dosageText: '', quantity: '', totalActiveSubstance: '', treatmentDays: '', notes: '',
-    prescriber: { lastName: '', firstName: '', address: '', phone: '' }, prescriberCandidateId: null,
+    prescriber: { lastName: '', firstName: '', address: '', phone: '' }, prescriberCandidateId: null, prescriberSourceIds: {},
     confidence: { productName: 0, strength: 0, form: 0, activeSubstance: 0, dosage: 0, quantity: 0 },
     classification: { status: 'unknown', reason: 'Manuellt tillagd rad. Klassning sker vid bekräftad granskning.', referenceVersion: 'demo-1' } };
 }

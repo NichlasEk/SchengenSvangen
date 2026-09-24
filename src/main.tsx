@@ -94,29 +94,45 @@ function App() {
     setDirty(true);
   }
   function changePrescriber(id: string, key: keyof Medication['prescriber'], value: string) {
-    setReview(previous => previous && ({ ...previous, medications: previous.medications.map(m => m.id === id ? { ...m, prescriber: { ...m.prescriber, [key]: value } } : m) }));
+    setReview(previous => previous && ({ ...previous, medications: previous.medications.map(m => m.id === id ? { ...m, prescriber: { ...m.prescriber, [key]: value }, prescriberSourceIds: { ...m.prescriberSourceIds, [key]: undefined } } : m) }));
     markEdited(`medications.${id}.prescriber.${key}`);
   }
   function copyPrescriber(id: string) {
     setReview(previous => {
       if (!previous) return previous;
       const source = previous.medications.find(m => m.id === id);
-      return source ? { ...previous, medications: previous.medications.map(m => ({ ...m, prescriber: { ...source.prescriber }, prescriberCandidateId: source.prescriberCandidateId })) } : previous;
+      return source ? { ...previous, medications: previous.medications.map(m => ({ ...m, prescriber: { ...source.prescriber }, prescriberCandidateId: source.prescriberCandidateId, prescriberSourceIds: { ...source.prescriberSourceIds } })) } : previous;
     });
     setEdited(previous => {
       const next = new Set(previous);
-      for (const medication of review?.medications ?? []) for (const [key] of prescriberFields) next.add(`medications.${medication.id}.prescriber.${key}`);
+      const source = review?.medications.find(m => m.id === id);
+      for (const medication of review?.medications ?? []) for (const [key] of prescriberFields) {
+        const path = `medications.${medication.id}.prescriber.${key}`;
+        if (source?.prescriberSourceIds?.[key]) next.delete(path);
+        else next.add(path);
+      }
       return next;
     });
     setDirty(true);
   }
-  function usePrescriberCandidate(medicationId: string, candidateId: string) {
+  function usePrescriberCandidate(medicationId: string, candidateId: string, fillEmpty = false) {
     setReview(previous => {
       if (!previous) return previous;
       const candidate = previous.prescriberCandidates.find(c => c.id === candidateId);
-      return candidate ? { ...previous, medications: previous.medications.map(m => m.id === medicationId ? { ...m, prescriber: { ...candidate.prescriber }, prescriberCandidateId: candidate.id } : m) } : previous;
+      return candidate ? { ...previous, medications: previous.medications.map(m => {
+        if (m.id !== medicationId) return m;
+        const prescriber = { ...m.prescriber }, prescriberSourceIds = fillEmpty ? { ...m.prescriberSourceIds } : {} as Medication['prescriberSourceIds'];
+        for (const [key] of prescriberFields) {
+          if (!fillEmpty || !prescriber[key]) {
+            prescriber[key] = candidate.prescriber[key];
+            if (candidate.prescriber[key]) prescriberSourceIds[key] = candidate.id;
+            else delete prescriberSourceIds[key];
+          }
+        }
+        return { ...m, prescriber, prescriberSourceIds, prescriberCandidateId: candidate.id };
+      }) } : previous;
     });
-    setEdited(previous => { const next = new Set(previous); for (const [key] of prescriberFields) next.delete(`medications.${medicationId}.prescriber.${key}`); return next; });
+    setEdited(previous => { const next = new Set(previous); for (const [key] of prescriberFields) if (!fillEmpty) next.delete(`medications.${medicationId}.prescriber.${key}`); return next; });
     setDirty(true);
   }
   function changeCommon(section: 'patient' | 'travel' | 'pharmacy', key: string, value: string) {
@@ -168,7 +184,7 @@ function App() {
           {review.medications.map((m, index) => <article className="med-card" key={m.id}>
             <div className="med-heading"><span className="med-number">{String(index + 1).padStart(2, '0')}</span><div><h3>{m.productName || 'Namnlöst preparat'}</h3><small>{m.originalText ? `Föreslagen rad: ${m.originalText}` : 'Manuellt tillagd rad'}</small></div><span className={`class-badge ${m.classification.status}`}>{dirty ? 'Klassning väntar på granskning' : m.classification.status === 'required' ? m.classification.sourceUrls?.length ? 'Intyg enligt pilotpost' : 'Intyg enligt demo-regel' : m.classification.status === 'not-required' ? 'Inget intyg enligt demo-regel' : 'Osäker klassning'}</span><button className="remove-med" onClick={() => removeMedication(m.id)}>Ta bort</button></div>
             <div className="med-fields">{fields.map(([key, label, confidence]) => { const path = `medications.${m.id}.${key}`, source = review.fieldEvidence[path], sourceDocument = session.documents.find(d => d.id === source?.documentId); return <label key={key}>{label}{confidence && <span className={m.confidence[confidence] < 0.8 ? 'confidence low' : 'confidence'}>{source?.method === 'mock-fixture' ? 'Ej bildläst' : source?.method === 'reference' ? 'Register' : source ? `${Math.round(m.confidence[confidence] * 100)} %` : 'Osäkert'}</span>}<input value={m[key]} onChange={e => changeMedication(m.id, key, e.target.value)} onFocus={() => { if (sourceDocument) setSelectedDocument(sourceDocument.id); }} placeholder="Ej känt — fyll i manuellt" autoComplete="off"/><small className="field-source">{edited.has(path) ? 'Korrigerat · ' : ''}{source?.method === 'mock-fixture' ? 'Mockfixture, ingen bildkälla' : source?.method === 'reference' ? `Produktreferens: ${source.rawText}` : sourceDocument ? `Källa: ${sourceDocument.name}` : 'Fylls i manuellt'}</small></label>; })}</div>
-            <div className="prescriber-block"><div className="prescriber-heading"><h4>A. Förskrivare för detta preparat</h4><button onClick={() => copyPrescriber(m.id)}>Använd samma förskrivare på alla</button></div>{review.prescriberCandidates.length > 0 && <div className="candidate-list">{review.prescriberCandidates.map(c => <div key={c.id}><span>Bildförslag: {[c.prescriber.firstName, c.prescriber.lastName].filter(Boolean).join(' ') || 'Osäkert namn'}{c.workplaceName && ` · ${c.workplaceName}`}<small>Arbetsplatsens telefon: {c.workplacePhone || 'ej läst'} · Förskrivarens telefon: {c.prescriber.phone || 'ej läst'}</small></span><button onClick={() => { usePrescriberCandidate(m.id, c.id); setSelectedDocument(c.documentId); }}>Använd för detta preparat</button></div>)}</div>}<div className="form-grid">{prescriberFields.map(([key, label]) => { const candidate = review.prescriberCandidates.find(c => c.id === m.prescriberCandidateId), source = candidate?.evidence[key]; return <label key={key}>{label}{source && <span className={source.confidence < .9 ? 'confidence low' : 'confidence'}>{Math.round(source.confidence * 100)} %</span>}<input value={m.prescriber[key]} onChange={e => changePrescriber(m.id, key, e.target.value)} placeholder="Ange manuellt" autoComplete="off"/><small className="field-source">{edited.has(`medications.${m.id}.prescriber.${key}`) ? 'Korrigerat manuellt' : source ? 'OCR-förslag från vald bild' : 'Fylls i manuellt'}</small></label>; })}</div></div>
+            <div className="prescriber-block"><div className="prescriber-heading"><h4>A. Förskrivare för detta preparat</h4><button onClick={() => copyPrescriber(m.id)}>Använd samma förskrivare på alla</button></div>{review.prescriberCandidates.length > 0 && <div className="candidate-list">{review.prescriberCandidates.map(c => <div key={c.id}><span>Bildförslag: {[c.prescriber.firstName, c.prescriber.lastName].filter(Boolean).join(' ') || 'Inget namn i bilden'}{c.workplaceName && ` · ${c.workplaceName}`}<small>Arbetsplatsens telefon: {c.workplacePhone || 'ej läst'} · Direkttelefon: {c.prescriber.phone && c.prescriber.phone !== c.workplacePhone ? c.prescriber.phone : 'ej läst'}</small></span><div className="candidate-actions"><button onClick={() => { usePrescriberCandidate(m.id, c.id); setSelectedDocument(c.documentId); }}>Använd</button><button onClick={() => { usePrescriberCandidate(m.id, c.id, true); setSelectedDocument(c.documentId); }}>Fyll tomma fält</button></div></div>)}</div>}<div className="form-grid">{prescriberFields.map(([key, label]) => { const candidate = review.prescriberCandidates.find(c => c.id === m.prescriberSourceIds?.[key]), source = candidate?.evidence[key], workplaceNumber = key === 'phone' && candidate && candidate.workplacePhone === m.prescriber.phone; return <label key={key}>{label}{source && <span className={source.confidence < .9 ? 'confidence low' : 'confidence'}>{Math.round(source.confidence * 100)} %</span>}<input value={m.prescriber[key]} onChange={e => changePrescriber(m.id, key, e.target.value)} onFocus={() => { if (source?.documentId) setSelectedDocument(source.documentId); }} placeholder="Ange manuellt" autoComplete="off"/><small className="field-source">{edited.has(`medications.${m.id}.prescriber.${key}`) ? 'Korrigerat manuellt' : source ? workplaceNumber ? 'Arbetsplatsens telefon från bild – kontrollera' : 'OCR-förslag från bild – kontrollera' : m.prescriber[key] ? 'Kontrollera mot bild' : 'Fylls i manuellt'}</small></label>; })}</div></div>
             <p className="reason"><b>Regelmotorns motivering:</b> {m.classification.reason} <small>({m.classification.referenceVersion})</small>{m.classification.sourceUrls?.map((url, i) => <a key={url} href={url} target="_blank" rel="noreferrer">{i === 0 ? 'FASS-produkt' : 'LV-föreskrift'}</a>)}</p>
           </article>)}<button className="add-med" onClick={addMedication} disabled={review.medications.length >= 30}>+ Lägg till läkemedel manuellt</button>
         </section>

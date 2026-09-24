@@ -64,6 +64,10 @@ function validateReview(value: unknown, original: ReviewModel): ReviewModel | un
         notes: m.notes, prescriber: m.prescriber,
         confidence: { ...saved.confidence, activeSubstance: fieldEvidence[substancePath]?.method === 'reference' ? 1 : changedProduct ? 0 : saved.confidence.activeSubstance },
         prescriberCandidateId: original.prescriberCandidates.some(c => c.id === m.prescriberCandidateId) ? m.prescriberCandidateId : null,
+        prescriberSourceIds: Object.fromEntries((['lastName', 'firstName', 'address', 'phone'] as const).flatMap(key => {
+          const candidate = original.prescriberCandidates.find(c => c.id === m.prescriberSourceIds?.[key]);
+          return candidate && candidate.prescriber[key] === m.prescriber[key] ? [[key, candidate.id]] : [];
+        })),
         classification: classifier.classify(m) };
     }),
   };

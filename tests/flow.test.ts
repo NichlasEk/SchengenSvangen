@@ -105,7 +105,7 @@ test('lokal OCR läser fiktivt förskrivarformulär som valbart förslag', { ski
   assert.equal(candidate.prescriber.lastName, 'Testsson');
   assert.equal(candidate.prescriber.address, 'Testvägen 1, 12345 Teststad');
   assert.equal(candidate.workplacePhone, '0101234567');
-  assert.equal(candidate.prescriber.phone, '');
+  assert.equal(candidate.prescriber.phone, '0101234567');
   assert.ok(review.medications.every(m => m.prescriberCandidateId === null && m.prescriber.firstName === ''));
 });
 
@@ -142,7 +142,7 @@ test('enskild benämningsrad tar bort UI-symbol och separerar läkemedelsform', 
   assert.equal(parsed[0].values.strength, '36 mg');
 });
 
-test('förskrivarvärden kopplas till sin bild utan att arbetsplatstelefon blir förskrivartelefon', () => {
+test('förskrivarvärden kopplas till sin bild och arbetsplatstelefon används när direktnummer saknas', () => {
   const doc = documents[2];
   const lines = [
     ['Förnamn', 20, 100], ['Test', 25, 120], ['Efternamn', 210, 100], ['Läkare', 220, 120],
@@ -157,7 +157,28 @@ test('förskrivarvärden kopplas till sin bild utan att arbetsplatstelefon blir 
   assert.equal(candidate.prescriber.lastName, 'Läkare');
   assert.equal(candidate.prescriber.address, 'Testvägen 1, 12345 Teststad');
   assert.equal(candidate.workplacePhone, '0101234567');
-  assert.equal(candidate.prescriber.phone, '');
+  assert.equal(candidate.prescriber.phone, '0101234567');
+  assert.equal(candidate.evidence.phone?.rawText, '0101234567');
   assert.equal(candidate.evidence.firstName?.documentId, doc.id);
   assert.equal(toObservations(parseTsv(tsv, doc)).length, lines.length);
+});
+
+test('arbetsplatsklipp med höga tecken läser adress och telefon utan namn', () => {
+  const doc = { ...documents[2], id: 'workplace-only' };
+  const rows: [string, number, number, number, number][] = [
+    ['Namn', 12, 105, 29, 8], ['Adress', 296, 105, 32, 8],
+    ['Barn- och ungdomspsykiatrisk öppenvård 2', 20, 124, 248, 14],
+    ['Änggatan 17, vån 4, Örebro', 304, 113, 155, 32],
+    ['Postnummer', 12, 153, 62, 8], ['Postort', 117, 153, 34, 8],
+    ['70185', 20, 174, 32, 9], ['Örebro', 124, 171, 40, 12],
+    ['Telefon arbetsplats', 11, 201, 93, 10], ['Telefon förskrivare', 169, 200, 91, 9],
+    ['+46196025700', 21, 221, 82, 9],
+  ];
+  const tsv = ['level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\tleft\ttop\twidth\theight\tconf\ttext',
+    ...rows.map(([value, x, y, width, height], i) => `5\t1\t${i + 1}\t1\t1\t1\t${x}\t${y}\t${width}\t${height}\t95\t${value}`)].join('\n');
+  const candidate = parsePrescriberCandidates(parseTsv(tsv, doc))[0];
+  assert.equal(candidate.prescriber.firstName, '');
+  assert.equal(candidate.prescriber.address, 'Änggatan 17, vån 4, Örebro, 70185 Örebro');
+  assert.equal(candidate.prescriber.phone, '+46196025700');
+  assert.equal(candidate.evidence.address?.documentId, doc.id);
 });
