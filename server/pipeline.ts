@@ -32,7 +32,7 @@ export class MedicationNormalizer implements Normalizer {
       id: randomUUID(), originalText: row.originalText ?? '', productName: row.productName ?? '',
       strength: row.strength ?? '', form: row.form ?? '', activeSubstance: '', atcCode: '',
       dosageText: row.dosageText ?? '', quantity: row.quantity ?? '', totalActiveSubstance: '', treatmentDays: '', notes: '',
-      confidence: { productName: 0, strength: 0, activeSubstance: 0, dosage: 0 },
+      confidence: { productName: 0, strength: 0, form: 0, activeSubstance: 0, dosage: 0, quantity: 0 },
       classification: { status: 'unknown', reason: 'Ej klassificerad', referenceVersion: 'demo-1' },
     }));
   }

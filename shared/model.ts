@@ -1,4 +1,4 @@
-export type Confidence = { productName: number; strength: number; activeSubstance: number; dosage: number };
+export type Confidence = { productName: number; strength: number; form: number; activeSubstance: number; dosage: number; quantity: number };
 export type Classification = { status: 'required' | 'not-required' | 'unknown'; reason: string; referenceVersion: string };
 export type Medication = {
   id: string; originalText: string; productName: string; strength: string; form: string;

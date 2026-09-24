@@ -8,8 +8,8 @@ type Field = keyof Pick<Medication, 'originalText' | 'productName' | 'strength' 
 const fields: [Field, string, keyof Medication['confidence'] | null][] = [
   ['originalText', 'Ursprunglig rad', null],
   ['productName', 'Preparat', 'productName'], ['strength', 'Styrka', 'strength'],
-  ['form', 'Form', null], ['activeSubstance', 'Aktiv substans', 'activeSubstance'],
-  ['atcCode', 'ATC-kod (internt)', null], ['dosageText', 'Dosering', 'dosage'], ['quantity', 'Mängd (internt)', null],
+  ['form', 'Form', 'form'], ['activeSubstance', 'Aktiv substans', 'activeSubstance'],
+  ['atcCode', 'ATC-kod (internt)', null], ['dosageText', 'Dosering', 'dosage'], ['quantity', 'Mängd (internt)', 'quantity'],
   ['totalActiveSubstance', 'Total mängd verksam substans', null], ['treatmentDays', 'Behandling under resa (dagar)', null], ['notes', 'Anmärkningar', null],
 ];
 const emptyMessage = 'Börja med att klistra in en skärmdump eller välja en bild.';
