@@ -18,6 +18,8 @@ För formulärlayouten ”Artikel för expedition”, prova `tests/fixtures/expe
 
 Resmål, avresedatum, hemkomstdatum och resans längd anges manuellt en gång per ärende. Systemet kontrollerar att dagantalet stämmer med datumen och ligger inom 30 dagar; det fyller inte i dagantalet automatiskt.
 
+Blankettens doseringsfält rymmer högst 88 tecken. Hela doseringsanvisningen bevaras i granskningsvyn, medan **Dosering på intyget** är ett separat fält som farmaceuten kontrollerar och vid behov förkortar själv. PDF-knapparna visas först när den korta texten finns och alla ifyllda fält ryms inom den medföljande PDF-blankettens gränser. Ingenting kapas automatiskt. Ett inbäddat Noto Sans-typsnitt (`reference/fonts/`, med licens) gör att även Unicode-tecken kan skrivas i utkastet.
+
 ```sh
 npm test
 npm run build

@@ -8,7 +8,7 @@ export type PrescriberCandidate = { id: string; documentId: string; prescriber: 
 export type OCRObservation = { documentId: string; text: string; confidence: number; bounds: FieldEvidence['bounds'] };
 export type Medication = {
   id: string; originalText: string; productName: string; strength: string; form: string;
-  activeSubstance: string; atcCode: string; dosageText: string; quantity: string;
+  activeSubstance: string; atcCode: string; dosageText: string; certificateDosageText: string; quantity: string;
   totalActiveSubstance: string; treatmentDays: string; notes: string;
   prescriber: Prescriber;
   prescriberCandidateId: string | null;
@@ -17,7 +17,7 @@ export type Medication = {
 };
 export function blankMedication(id: string): Medication {
   return { id, originalText: '', productName: '', strength: '', form: '', activeSubstance: '', atcCode: '',
-    dosageText: '', quantity: '', totalActiveSubstance: '', treatmentDays: '', notes: '',
+    dosageText: '', certificateDosageText: '', quantity: '', totalActiveSubstance: '', treatmentDays: '', notes: '',
     prescriber: { lastName: '', firstName: '', address: '', phone: '' }, prescriberCandidateId: null, prescriberSourceIds: {},
     confidence: { productName: 0, strength: 0, form: 0, activeSubstance: 0, dosage: 0, quantity: 0 },
     classification: { status: 'unknown', reason: 'Manuellt tillagd rad. Klassning sker vid bekräftad granskning.', referenceVersion: 'demo-1' } };

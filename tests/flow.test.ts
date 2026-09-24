@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { createReview, classifier, MockImageExtractionProvider, PipeMedicationParser } from '../server/pipeline.js';
 import type { InputDocument } from '../server/pipeline.js';
 import { DemoCertificateGenerator, DemoPdfTemplate } from '../server/certificates.js';
-import { draftReadiness } from '../shared/validation.js';
+import { PDFDocument } from 'pdf-lib';
+import { draftReadiness, PDF_FIELD_MAX } from '../shared/validation.js';
 import { SessionStore } from '../server/sessions.js';
 import { readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
@@ -35,7 +36,7 @@ test('flera syntetiska underlag går via lokal OCR, normalisering och klassning 
   review.travel.destination = 'Fiktiv destination'; review.travel.departureDate = '2026-10-01';
   review.travel.returnDate = '2026-10-10'; review.travel.durationDays = '10';
   for (const m of review.medications.filter(m => m.classification.status === 'required')) {
-    m.activeSubstance = 'Fiktiv substans'; m.dosageText = '1 tablett dagligen'; m.totalActiveSubstance = '50 mg'; m.treatmentDays = '10';
+    m.activeSubstance = 'Fiktiv substans'; m.dosageText = '1 tablett dagligen'; m.certificateDosageText = m.dosageText; m.totalActiveSubstance = '50 mg'; m.treatmentDays = '10';
     m.prescriber.firstName = 'Test'; m.prescriber.lastName = `Förskrivare ${m.productName}`;
   }
   assert.deepEqual(draftReadiness(review), []);
@@ -49,6 +50,41 @@ test('flera syntetiska underlag går via lokal OCR, normalisering och klassning 
   const bytes = await Promise.all(certificates.map(c => new DemoPdfTemplate().render(c)));
   assert.ok(bytes.every(pdf => Buffer.from(pdf).subarray(0, 5).toString() === '%PDF-'));
   assert.ok(bytes.every(pdf => Buffer.from(pdf).length > 100_000));
+});
+
+test('PDF-utkast klarar namn och dosering med Unicode-tecken', async () => {
+  const review = await createReview(documents, mock, pipe);
+  const medication = review.medications.find(m => m.classification.status === 'required')!;
+  review.patient.name = 'Łukasz Testperson';
+  medication.prescriber.firstName = 'Åsa'; medication.prescriber.lastName = 'Öster';
+  medication.dosageText = '½ tablett – morgon och kväll'; medication.certificateDosageText = medication.dosageText;
+  const pdf = await new DemoPdfTemplate().render(new DemoCertificateGenerator().generate({ ...review, medications: [medication] })[0]);
+  assert.equal(Buffer.from(pdf).subarray(0, 5).toString(), '%PDF-');
+});
+
+test('långa doseringsanvisningar bevaras men kräver separat kort text på blanketten', async () => {
+  const review = await createReview(documents, mock, pipe);
+  const medication = review.medications.find(m => m.classification.status === 'required')!;
+  review.medications = [medication];
+  review.patient.name = 'Testperson Testsson'; review.patient.passportNumber = 'TEST-ID'; review.pharmacy.name = 'Demoapotek';
+  review.travel.departureDate = '2026-10-01'; review.travel.returnDate = '2026-10-10'; review.travel.durationDays = '10';
+  medication.prescriber.firstName = 'Test'; medication.prescriber.lastName = 'Testsson';
+  medication.totalActiveSubstance = '50 mg'; medication.treatmentDays = '10';
+  medication.dosageText = 'Ta en tablett på morgonen enligt ordination från förskrivaren. Upprepa aldrig dosen. '.repeat(2);
+  medication.certificateDosageText = '';
+  assert.match(draftReadiness(review).join(' '), /kort dosering/);
+  medication.certificateDosageText = '1 tablett varje morgon';
+  assert.deepEqual(draftReadiness(review), []);
+  medication.certificateDosageText = 'A'.repeat(89);
+  assert.match(draftReadiness(review).join(' '), /Dosering 19: 89 tecken/);
+  medication.certificateDosageText = '1 tablett varje morgon';
+  const pdf = await new DemoPdfTemplate().render(new DemoCertificateGenerator().generate(review)[0]);
+  assert.equal(Buffer.from(pdf).subarray(0, 5).toString(), '%PDF-');
+});
+
+test('fältgränserna i valideringen följer den inlästa LMV-blanketten', async () => {
+  const pdf = await PDFDocument.load(readFileSync('reference/lv-schengenintyg.pdf'));
+  for (const [name, limit] of Object.entries(PDF_FIELD_MAX)) assert.equal(pdf.getForm().getTextField(name).getMaxLength(), limit, name);
 });
 
 test('okänt eller rättat preparat får aldrig en gissad klassning', async () => {

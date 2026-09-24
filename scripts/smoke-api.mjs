@@ -18,7 +18,7 @@ try {
   for (const medication of review.medications.filter(m => m.classification.status === 'required')) {
     medication.prescriber = { ...review.prescriberCandidates[0].prescriber };
     medication.prescriberCandidateId = review.prescriberCandidates[0].id;
-    medication.dosageText = '1 tablett dagligen'; medication.totalActiveSubstance = '50 mg'; medication.treatmentDays = '10';
+    medication.dosageText = '1 tablett dagligen'; medication.certificateDosageText = medication.dosageText; medication.totalActiveSubstance = '50 mg'; medication.treatmentDays = '10';
   }
   const unknown = { ...review.medications[0], id: randomUUID(), originalText: '', productName: 'Okänt testmedel', strength: '1 mg', form: 'tablett', activeSubstance: '', atcCode: '',
     classification: { status: 'required', reason: 'förfalskad', referenceVersion: 'x' } };

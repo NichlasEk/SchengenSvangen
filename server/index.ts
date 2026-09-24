@@ -34,7 +34,7 @@ function validateReview(value: unknown, original: ReviewModel): ReviewModel | un
   if (![...Object.values(r.patient), ...Object.values(r.travel), ...Object.values(r.pharmacy)].every(plain)) return;
   const ids = new Set(original.medications.map(m => m.id));
   if (!r.medications.every(m => m && typeof m.id === 'string' && (ids.has(m.id) || /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(m.id)) &&
-    [m.originalText, m.productName, m.strength, m.form, m.activeSubstance, m.atcCode, m.dosageText, m.quantity, m.totalActiveSubstance, m.treatmentDays, m.notes,
+    [m.originalText, m.productName, m.strength, m.form, m.activeSubstance, m.atcCode, m.dosageText, m.certificateDosageText, m.quantity, m.totalActiveSubstance, m.treatmentDays, m.notes,
       m.prescriber?.lastName, m.prescriber?.firstName, m.prescriber?.address, m.prescriber?.phone].every(plain))) return;
   if (new Set(r.medications.map(m => m.id)).size !== r.medications.length) return;
   const fieldEvidence = { ...original.fieldEvidence };
@@ -59,7 +59,7 @@ function validateReview(value: unknown, original: ReviewModel): ReviewModel | un
         fieldEvidence[atcPath] = { documentId: null, method: 'reference', rawText: match.nplId, confidence: 1 };
       }
       return { ...saved, originalText: m.originalText, productName: m.productName, strength: m.strength,
-        form: m.form, activeSubstance, atcCode, dosageText: m.dosageText,
+        form: m.form, activeSubstance, atcCode, dosageText: m.dosageText, certificateDosageText: m.certificateDosageText,
         quantity: m.quantity, totalActiveSubstance: m.totalActiveSubstance, treatmentDays: m.treatmentDays,
         notes: m.notes, prescriber: m.prescriber,
         confidence: { ...saved.confidence, activeSubstance: fieldEvidence[substancePath]?.method === 'reference' ? 1 : changedProduct ? 0 : saved.confidence.activeSubstance },

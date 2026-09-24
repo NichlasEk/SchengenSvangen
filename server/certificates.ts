@@ -1,4 +1,5 @@
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
+import fontkit from '@pdf-lib/fontkit';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import type { Medication, ReviewModel } from '../shared/model.js';
@@ -25,6 +26,8 @@ export class DemoPdfTemplate implements CertificateTemplate {
   async render(c: Certificate): Promise<Uint8Array> {
     const source = readFileSync(path.resolve('reference/lv-schengenintyg.pdf'));
     const pdf = await PDFDocument.load(source);
+    pdf.registerFontkit(fontkit);
+    const textFont = await pdf.embedFont(readFileSync(path.resolve('reference/fonts/NotoSans-Regular.ttf')), { subset: true });
     const form = pdf.getForm();
     const fill = (name: string, value: string) => form.getTextField(name).setText(value);
     fill('Efternamn läkare 1', c.prescriber.lastName);
@@ -46,7 +49,7 @@ export class DemoPdfTemplate implements CertificateTemplate {
     fill('Läkemedelsform 16', c.medication.form);
     fill('Verksam substans 17', c.medication.activeSubstance);
     fill('Styrka 18', c.medication.strength);
-    fill('Dosering 19', c.medication.dosageText);
+    fill('Dosering 19', c.medication.certificateDosageText);
     fill('Total mängd av verksam substans 20', c.medication.totalActiveSubstance);
     fill('Behandlingens varaktighet 21', c.medication.treatmentDays);
     fill('Anmärkningar 22', c.medication.notes);
@@ -56,6 +59,7 @@ export class DemoPdfTemplate implements CertificateTemplate {
     fill('Ort apotek 24', c.pharmacy.city);
     // Utfärdandedatum, signature and physical stamp stay empty until the pharmacy issues the paper.
     for (const name of ['Återställ fält A', 'Återställ fält C', 'Skrivut']) form.removeField(form.getField(name));
+    form.updateFieldAppearances(textFont);
     form.flatten();
     const page = pdf.getPage(0);
     const bold = await pdf.embedFont(StandardFonts.HelveticaBold);

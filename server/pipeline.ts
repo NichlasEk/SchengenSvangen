@@ -58,7 +58,7 @@ export class MedicationNormalizer implements Normalizer {
       return {
         id, originalText: values.originalText ?? '', productName: values.productName ?? '',
         strength: values.strength ?? '', form: values.form ?? '', activeSubstance: values.activeSubstance ?? '', atcCode: values.atcCode ?? '',
-        dosageText: values.dosageText ?? '', quantity: values.quantity ?? '',
+        dosageText: values.dosageText ?? '', certificateDosageText: (values.dosageText?.length ?? 0) <= 88 ? values.dosageText ?? '' : '', quantity: values.quantity ?? '',
         totalActiveSubstance: '', treatmentDays: '', notes: '',
         prescriber: { lastName: '', firstName: '', address: '', phone: '' },
         prescriberCandidateId: null,
