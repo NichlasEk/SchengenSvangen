@@ -1,0 +1,24 @@
+[Unit]
+Description=Apothictech Intyg demo API and web
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=nichlas
+Group=nichlas
+WorkingDirectory=/home/nichlas/SchengenSvangen
+Environment=NODE_ENV=production
+Environment=HOST=127.0.0.1
+Environment=PORT=3001
+Environment=SESSION_TTL_MINUTES=15
+ExecStart=/home/nichlas/SchengenSvangen/node_modules/.bin/tsx server/index.ts
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+
+[Install]
+WantedBy=multi-user.target

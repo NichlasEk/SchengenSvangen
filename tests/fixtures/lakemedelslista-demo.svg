@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="600" viewBox="0 0 1000 600">
+<rect width="1000" height="600" fill="#f5f8f8"/>
+<rect x="40" y="40" width="920" height="520" rx="14" fill="white" stroke="#cedbdd"/>
+<text x="75" y="98" font-family="sans-serif" font-size="30" font-weight="bold" fill="#1b3942">FIKTIV LÄKEMEDELSLISTA · DEMO</text>
+<text x="75" y="134" font-family="sans-serif" font-size="17" fill="#526e76">Inga personuppgifter. Mock-adaptern läser inte bilden ännu.</text>
+<line x1="75" y1="164" x2="925" y2="164" stroke="#cedbdd"/>
+<g font-family="sans-serif" font-size="21" fill="#193943">
+<text x="75" y="214">01</text><text x="140" y="214">Demomedicin A</text><text x="500" y="214">10 mg · tablett</text><text x="790" y="214">30 st</text>
+<text x="75" y="292">02</text><text x="140" y="292">Demomedicin B</text><text x="500" y="292">20 mg · kapsel</text><text x="790" y="292">30 st</text>
+<text x="75" y="370">03</text><text x="140" y="370">Demo Kontroll C</text><text x="500" y="370">5 mg · tablett</text><text x="790" y="370">30 st</text>
+<text x="75" y="448">04</text><text x="140" y="448">Demo Kontroll D</text><text x="500" y="448">2 mg · tablett</text><text x="790" y="448">10 st</text>
+</g>
+</svg>
