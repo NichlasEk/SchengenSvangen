@@ -178,7 +178,7 @@ test('arbetsplatsklipp med höga tecken läser adress och telefon utan namn', ()
     ...rows.map(([value, x, y, width, height], i) => `5\t1\t${i + 1}\t1\t1\t1\t${x}\t${y}\t${width}\t${height}\t95\t${value}`)].join('\n');
   const candidate = parsePrescriberCandidates(parseTsv(tsv, doc))[0];
   assert.equal(candidate.prescriber.firstName, '');
-  assert.equal(candidate.prescriber.address, 'Änggatan 17, vån 4, Örebro, 70185 Örebro');
+  assert.equal(candidate.prescriber.address, 'Änggatan 17, vån 4, 70185 Örebro');
   assert.equal(candidate.prescriber.phone, '+46196025700');
   assert.equal(candidate.evidence.address?.documentId, doc.id);
 });

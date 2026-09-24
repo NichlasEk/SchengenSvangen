@@ -99,9 +99,11 @@ export function parsePrescriberCandidates(blocks: ExtractedText[]): PrescriberCa
     // The official form asks for a contact number. Use the explicitly labelled
     // workplace number only when the direct prescriber number is empty.
     if (prescriberPhone || workplacePhone) evidence.phone = (prescriberPhone ?? workplacePhone)!.evidence;
+    const streetParts = street?.text.split(',').map(part => part.trim()) ?? [];
+    if (city && normalized(streetParts.at(-1) ?? '') === normalized(city.text)) streetParts.pop();
     return { id: documentId, documentId, prescriber: {
       firstName: first?.text ?? '', lastName: last?.text ?? '',
-      address: street && postCode && city ? `${street.text}, ${postCode.text} ${city.text}` : '',
+      address: street && postCode && city ? `${streetParts.join(', ')}, ${postCode.text} ${city.text}` : '',
       phone: prescriberPhone?.text ?? workplacePhone?.text ?? '',
     }, workplaceName: workplaceName?.text ?? '', workplacePhone: workplacePhone?.text ?? '', evidence };
   });
