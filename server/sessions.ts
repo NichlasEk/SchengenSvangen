@@ -1,13 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import type { ReviewModel, SessionView } from '../shared/model.js';
+import type { InputDocument } from './pipeline.js';
 
-type Session = SessionView & { image: Buffer; mimeType: string; expires: number };
+type Session = Omit<SessionView, 'documents'> & { documents: InputDocument[]; expires: number };
 export class SessionStore {
   private sessions = new Map<string, Session>();
   constructor(private ttlMs = 15 * 60_000, private now = () => Date.now()) {}
-  create(image: Buffer, mimeType: string, review: ReviewModel): SessionView {
+  create(documents: InputDocument[], review: ReviewModel): SessionView {
     const id = randomUUID(), expires = this.now() + this.ttlMs;
-    const session: Session = { id, expires, expiresAt: new Date(expires).toISOString(), source: 'mock-image', state: 'DRAFT', reviewed: false, review, image, mimeType };
+    const session: Session = { id, expires, expiresAt: new Date(expires).toISOString(), source: 'mock-image', state: 'DRAFT', reviewed: false, review, documents };
     this.sessions.set(id, session);
     return this.view(session);
   }
@@ -17,7 +18,7 @@ export class SessionStore {
     return session;
   }
   view(session: Session): SessionView {
-    return { id: session.id, expiresAt: session.expiresAt, source: session.source, state: session.state, reviewed: session.reviewed, review: session.review };
+    return { id: session.id, expiresAt: session.expiresAt, source: session.source, state: session.state, reviewed: session.reviewed, documents: session.documents.map(({ id, kind, name, mimeType }) => ({ id, kind, name, mimeType })), review: session.review };
   }
   update(id: string, review: ReviewModel): SessionView | undefined {
     const session = this.get(id);

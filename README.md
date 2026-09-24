@@ -11,7 +11,7 @@ npm ci
 npm run dev
 ```
 
-Öppna `http://127.0.0.1:5173/intyg/`. Klistra in en PNG/JPEG/WebP med Ctrl+V eller ladda upp `tests/fixtures/lakemedelslista-demo.png`. Fyll i **fiktiva** patient- och reseuppgifter, granska fälten, bekräfta, och hämta två PDF-utkast. Avsluta sessionen med knappen.
+Öppna `http://127.0.0.1:5173/intyg/`. Välj bildtyp och lägg till `tests/fixtures/kund-demo.png` som kundbild, `tests/fixtures/lakemedelslista-demo.png` som läkemedelsbild och `tests/fixtures/forskrivare-demo.png` som förskrivarbild. Ctrl+V lägger en bild i vald kategori. Fyll i **fiktiva** patient-, rese- och förskrivaruppgifter, granska fälten, bekräfta, och hämta två PDF-utkast. Avsluta sessionen med knappen.
 
 ```sh
 npm test
@@ -29,14 +29,14 @@ Servern `192.168.32.186` kör samma repo under `/home/nichlas/SchengenSvangen` v
 | Katalog | Ansvar |
 | --- | --- |
 | `shared/model.ts` | Strukturerad `ReviewModel`, läkemedel och klassning |
-| `server/pipeline.ts` | `ImageExtractionProvider` → parser → normalizer → `DrugClassificationService` med utbytbar referenskälla |
+| `server/pipeline.ts` | Flera typade bilder → `ImageExtractionProvider` → parser → normalizer → `DrugClassificationService` med utbytbar referenskälla och fältvis källspårning |
 | `server/sessions.ts` | RAM-sessioner, TTL och radering |
 | `server/certificates.ts` | `CertificateGenerator`, officiell PDF-mall och PDF/print-adaptrar |
 | `server/signed-submission.ts` | Separat framtida tjänst för återinläst signerat/stämplat dokument; stub utan uppladdning |
 | `server/index.ts` | API, validering och statisk produktionsklient |
 | `src/` | Inklistring, uppladdning och farmaceutens granskningsvy |
 
-Sessionens data och bild finns enbart i serverns RAM. `SESSION_TTL_MINUTES` är 15 som standard. Sessionen tas bort vid explicit avslut eller timeout; en städning körs varje minut. Processomstart raderar alla sessioner. Servern loggar endast en teknisk startpost. Ingen patientanalys eller permanent bildkatalog finns. Webbläsarens egen nedladdning av PDF är däremot användarstyrd och påverkas inte av serverns TTL.
+Sessionens data och bilder finns enbart i serverns RAM. Högst sex bilder per ärende, 8 MB per bild och 24 MB totalt. `SESSION_TTL_MINUTES` är 15 som standard. Sessionen tas bort vid explicit avslut eller timeout; en städning körs varje minut. Processomstart raderar alla sessioner. Servern loggar endast en teknisk startpost. Ingen patientanalys eller permanent bildkatalog finns. Webbläsarens egen nedladdning av PDF är däremot användarstyrd och påverkas inte av serverns TTL.
 
 ## Fysiskt och framtida inskickningsflöde
 
@@ -48,7 +48,9 @@ Läkemedelsverket beskriver att [apotek utfärdar intyget och skickar kopia](htt
 
 ## Antaganden och nästa byte av adapter
 
-- Mock-extraktion är uttryckligen en fixture, inte OCR. Byt `ImageExtractionProvider` utan att ändra review/PDF-lagren.
+- Mock-extraktion är uttryckligen en fixture, inte OCR. Den ger fyra rader en gång även om flera läkemedelsbilder laddas upp och tillskriver inga fält någon bild. Byt `ImageExtractionProvider` utan att ändra review/PDF-lagren.
+- Underlagen märks som kund, läkemedel eller förskrivare och sparas temporärt tillsammans. `fieldEvidence` kan bära bild-ID, textruta, råtext och osäkerhet för en kommande OCR-adapter. I demon är dessa källor `mock-fixture` eller tomma; inga bildpositioner hittas på.
+- Förskrivare hör nu till varje läkemedel. Granskaren kan kopiera samma förskrivare till alla när det stämmer.
 - Regelmotorn gör exakta namnuppslag i en fiktiv versionerad referenskälla. Okända namn får `unknown`; den gissar inte utifrån OCR-förtroende eller ATC-kod.
 - Förtroendesiffror för mock-raderna är demonstrativa. Substans och ATC lämnas tomma med låg säkerhet.
 - Granskaren kan ändra alla tolkade fält; servern räknar om klassningen från kontrollerad källa när granskningen bekräftas. Ändring i klienten spärrar PDF tills ny bekräftelse.

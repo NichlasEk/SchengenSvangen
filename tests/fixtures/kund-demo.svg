@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="430" viewBox="0 0 900 430">
+<rect width="900" height="430" fill="#eef3f2"/><rect x="35" y="35" width="830" height="360" rx="12" fill="white" stroke="#bccdce"/>
+<g font-family="sans-serif" fill="#23414a"><text x="65" y="90" font-size="28" font-weight="bold">FIKTIV KUNDUPPGIFT · DEMO</text><text x="65" y="145" font-size="19">Namn: Testperson Testsson</text><text x="65" y="190" font-size="19">Passnummer: TEST-ID-001</text><text x="65" y="235" font-size="19">Födelseort och datum: Teststad, 1990-01-01</text><text x="65" y="280" font-size="19">Adress: Testgatan 1, 111 11 Teststad</text><text x="65" y="345" font-size="15" fill="#6c868d">Enbart syntetiska uppgifter. Mocken läser inte denna bild.</text></g>
+</svg>

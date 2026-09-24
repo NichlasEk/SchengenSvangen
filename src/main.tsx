@@ -1,57 +1,95 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import type { Medication, ReviewModel, SessionView } from '../shared/model';
+import type { DocumentKind, Medication, ReviewModel, SessionView } from '../shared/model';
 import { draftReadiness } from '../shared/validation';
 import './style.css';
 
 type Field = keyof Pick<Medication, 'originalText' | 'productName' | 'strength' | 'form' | 'activeSubstance' | 'atcCode' | 'dosageText' | 'quantity' | 'totalActiveSubstance' | 'treatmentDays' | 'notes'>;
+type PendingDocument = { id: string; kind: DocumentKind; file: File };
+const kindLabels: Record<DocumentKind, string> = { patient: 'Kund / patient', medications: 'Läkemedel', prescriber: 'Förskrivare / recept' };
 const fields: [Field, string, keyof Medication['confidence'] | null][] = [
-  ['originalText', 'Ursprunglig rad', null],
-  ['productName', 'Preparat', 'productName'], ['strength', 'Styrka', 'strength'],
-  ['form', 'Form', 'form'], ['activeSubstance', 'Aktiv substans', 'activeSubstance'],
-  ['atcCode', 'ATC-kod (internt)', null], ['dosageText', 'Dosering', 'dosage'], ['quantity', 'Mängd (internt)', 'quantity'],
-  ['totalActiveSubstance', 'Total mängd verksam substans', null], ['treatmentDays', 'Behandling under resa (dagar)', null], ['notes', 'Anmärkningar', null],
+  ['originalText', 'Ursprunglig rad', null], ['productName', 'Preparat', 'productName'],
+  ['strength', 'Styrka', 'strength'], ['form', 'Form', 'form'],
+  ['activeSubstance', 'Aktiv substans', 'activeSubstance'], ['atcCode', 'ATC-kod (internt)', null],
+  ['dosageText', 'Dosering', 'dosage'], ['quantity', 'Mängd (internt)', 'quantity'],
+  ['totalActiveSubstance', 'Total mängd verksam substans', null],
+  ['treatmentDays', 'Behandling under resa (dagar)', null], ['notes', 'Anmärkningar', null],
 ];
-const emptyMessage = 'Börja med att klistra in en skärmdump eller välja en bild.';
+const prescriberFields: [keyof Medication['prescriber'], string][] = [
+  ['lastName', 'Efternamn'], ['firstName', 'Förnamn'], ['address', 'Adress'], ['phone', 'Telefon'],
+];
 function App() {
   const [session, setSession] = useState<SessionView | null>(null);
   const [review, setReview] = useState<ReviewModel | null>(null);
+  const [pending, setPending] = useState<PendingDocument[]>([]);
+  const [kind, setKind] = useState<DocumentKind>('medications');
+  const [selectedDocument, setSelectedDocument] = useState<string | null>(null);
+  const [edited, setEdited] = useState<Set<string>>(new Set());
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState(emptyMessage);
+  const [message, setMessage] = useState('Välj bildtyp, lägg till underlag och analysera när du är klar.');
   const fileInput = useRef<HTMLInputElement>(null);
 
-  async function submitImage(file: File) {
-    if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) { setMessage('Välj en PNG-, JPEG- eller WebP-bild.'); return; }
-    if (file.size > 8 * 1024 * 1024) { setMessage('Bilden är för stor (max 8 MB).'); return; }
-    setBusy(true); setMessage('Analyserar demo-bilden…');
-    try {
-      const body = new FormData(); body.append('image', file);
-      const response = await fetch('/intyg/api/sessions', { method: 'POST', body });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Analysen misslyckades.');
-      if (session) await fetch(`/intyg/api/sessions/${session.id}`, { method: 'DELETE' });
-      setSession(data); setReview(data.review); setDirty(false);
-      setMessage('Demo-extraktion klar. Raderna kommer från en syntetisk fixture, inte från bildens innehåll. Kontrollera allt.');
-    } catch (error) { setMessage(error instanceof Error ? error.message : 'Tekniskt fel.'); }
-    finally { setBusy(false); }
+  function addFiles(files: File[], documentKind: DocumentKind) {
+    const accepted = files.filter(file => ['image/png', 'image/jpeg', 'image/webp'].includes(file.type) && file.size <= 8 * 1024 * 1024);
+    if (accepted.length !== files.length) setMessage('Endast PNG, JPEG och WebP upp till 8 MB per bild kan läggas till.');
+    setPending(previous => {
+      const available = Math.max(0, 6 - previous.length);
+      if (accepted.length > available) setMessage('Högst sex bilder per ärende.');
+      return [...previous, ...accepted.slice(0, available).map(file => ({ id: crypto.randomUUID(), kind: documentKind, file }))];
+    });
   }
   useEffect(() => {
     function onPaste(event: ClipboardEvent) {
+      if (session) return;
       const image = Array.from(event.clipboardData?.items ?? []).find(item => item.type.startsWith('image/'));
       const file = image?.getAsFile();
-      if (file) { event.preventDefault(); void submitImage(file); }
+      if (file) { event.preventDefault(); addFiles([file], kind); }
     }
     window.addEventListener('paste', onPaste);
     return () => window.removeEventListener('paste', onPaste);
-  });
+  }, [kind, session]);
+  async function analyze() {
+    if (!pending.some(d => d.kind === 'medications')) { setMessage('Lägg till minst en läkemedelsbild.'); return; }
+    if (pending.reduce((sum, d) => sum + d.file.size, 0) > 24 * 1024 * 1024) { setMessage('Bilderna får vara högst 24 MB tillsammans.'); return; }
+    setBusy(true); setMessage('Skapar granskningssession med demo-extraktion…');
+    try {
+      const body = new FormData();
+      for (const document of pending) { body.append('images', document.file); body.append('kinds', document.kind); }
+      const response = await fetch('/intyg/api/sessions', { method: 'POST', body });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Analysen misslyckades.');
+      setSession(data); setReview(data.review); setSelectedDocument(data.documents[0]?.id ?? null);
+      setPending([]); setEdited(new Set()); setDirty(false);
+      setMessage('Underlagen är inlästa. Läkemedelsraderna är fortfarande mockdata och har ingen bildkälla. Fyll i och jämför allt manuellt.');
+    } catch (error) { setMessage(error instanceof Error ? error.message : 'Tekniskt fel.'); }
+    finally { setBusy(false); }
+  }
+  function markEdited(path: string) { setEdited(previous => new Set(previous).add(path)); setDirty(true); }
   function changeMedication(id: string, field: Field, value: string) {
     setReview(previous => previous && ({ ...previous, medications: previous.medications.map(m => m.id === id ? { ...m, [field]: value } : m) }));
+    markEdited(`medications.${id}.${field}`);
+  }
+  function changePrescriber(id: string, key: keyof Medication['prescriber'], value: string) {
+    setReview(previous => previous && ({ ...previous, medications: previous.medications.map(m => m.id === id ? { ...m, prescriber: { ...m.prescriber, [key]: value } } : m) }));
+    markEdited(`medications.${id}.prescriber.${key}`);
+  }
+  function copyPrescriber(id: string) {
+    setReview(previous => {
+      if (!previous) return previous;
+      const prescriber = previous.medications.find(m => m.id === id)?.prescriber;
+      return prescriber ? { ...previous, medications: previous.medications.map(m => ({ ...m, prescriber: { ...prescriber } })) } : previous;
+    });
+    setEdited(previous => {
+      const next = new Set(previous);
+      for (const medication of review?.medications ?? []) for (const [key] of prescriberFields) next.add(`medications.${medication.id}.prescriber.${key}`);
+      return next;
+    });
     setDirty(true);
   }
-  function changeCommon(section: 'patient' | 'travel' | 'prescriber' | 'pharmacy', key: string, value: string) {
+  function changeCommon(section: 'patient' | 'travel' | 'pharmacy', key: string, value: string) {
     setReview(previous => previous && ({ ...previous, [section]: { ...previous[section], [key]: value } }));
-    setDirty(true);
+    markEdited(`${section}.${key}`);
   }
   async function confirmReview() {
     if (!session || !review) return;
@@ -61,49 +99,47 @@ function App() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Granskning kunde inte sparas.');
       setSession(data); setReview(data.review); setDirty(false);
-      setMessage('Granskning bekräftad. Klassningen har räknats om från demo-registret. PDF-utkast kan nu hämtas.');
+      setMessage('Granskning bekräftad. Klassningen har räknats om från demo-registret.');
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Tekniskt fel.'); }
     finally { setBusy(false); }
   }
   async function finish() {
     if (session) await fetch(`/intyg/api/sessions/${session.id}`, { method: 'DELETE' });
-    setSession(null); setReview(null); setDirty(false); setMessage('Sessionen är raderad. Klistra in eller välj en ny bild.');
-    if (fileInput.current) fileInput.current.value = '';
+    setSession(null); setReview(null); setSelectedDocument(null); setEdited(new Set()); setDirty(false);
+    setMessage('Sessionen är raderad. Lägg till nya bilder för nästa ärende.');
   }
   const required = review?.medications.filter(m => m.classification.status === 'required') ?? [];
   const unknown = review?.medications.filter(m => m.classification.status === 'unknown').length ?? 0;
   const readinessIssues = review ? draftReadiness(review) : [];
-  const group = (section: 'prescriber' | 'patient' | 'travel' | 'pharmacy', label: string, entries: [string, string][]) => <div className="field-group"><h3>{label}</h3><div className="form-grid">{entries.map(([key, caption]) => <label key={key}>{caption}<input type={key.endsWith('Date') ? 'date' : 'text'} value={(review?.[section] as Record<string, string> | undefined)?.[key] ?? ''} onChange={e => changeCommon(section, key, e.target.value)} autoComplete="off"/></label>)}</div></div>;
+  const shownDocument = session?.documents.find(d => d.id === selectedDocument);
+  const group = (section: 'patient' | 'travel' | 'pharmacy', label: string, entries: [string, string][]) => <div className="field-group"><h3>{label}</h3><div className="form-grid">{entries.map(([key, caption]) => <label key={key}>{caption}<input type={key.endsWith('Date') ? 'date' : 'text'} value={(review?.[section] as Record<string, string> | undefined)?.[key] ?? ''} onChange={e => changeCommon(section, key, e.target.value)} autoComplete="off"/><small className="field-source">{edited.has(`${section}.${key}`) ? 'Korrigerat manuellt' : 'Fylls i manuellt'}</small></label>)}</div></div>;
   return <div className="app">
     <header><div className="brand"><span className="brand-icon">✦</span><div><strong>APOTHICTECH</strong><small>INTYG / ARBETSSTATION</small></div></div><span className="demo-pill">DEMO · LOKAL DRIFT</span></header>
     <main>
       <div className="eyebrow">SCHENGENINTYG / ARBETSFLÖDE 01</div>
-      <h1>Från läkemedelslista<br/><em>till granskat intygsutkast.</em></h1>
-      <p className="lede">Ett arbetsverktyg för farmaceutens kontroll. Den här versionen använder fiktiva läkemedel och skapar endast tydligt märkta PDF-utkast.</p>
-      <section className="intake">
-        <div className="intake-copy"><span className="step">01 / UNDERLAG</span><h2>Klistra in läkemedelslista</h2><p>Tryck <kbd>Ctrl</kbd> + <kbd>V</kbd> med en bild i urklipp, eller välj en fil. PNG, JPEG och WebP upp till 8 MB.</p></div>
-        <div className="intake-actions"><input ref={fileInput} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={e => { const file = e.target.files?.[0]; if (file) void submitImage(file); }}/><button className="primary" disabled={busy} onClick={() => fileInput.current?.click()}>{busy ? 'Bearbetar…' : 'Välj bild'}</button><span>eller klistra in var som helst på sidan</span></div>
-      </section>
+      <h1>Flera underlag.<br/><em>Ett granskat intyg per preparat.</em></h1>
+      <p className="lede">Samla kund-, läkemedels- och förskrivarunderlag i samma ärende. Den här versionen använder fiktiv extraktion och klassning.</p>
+      {!session && <section className="intake multi-intake"><div><span className="step">01 / UNDERLAG</span><h2>Lägg till skärmdumpar</h2><p>Välj vilken information bilden innehåller. Du kan klistra in med <kbd>Ctrl</kbd> + <kbd>V</kbd> eller välja flera bilder. En bild får innehålla fler än en typ av uppgifter; välj dess huvudsakliga innehåll.</p><div className="kind-picker">{(Object.keys(kindLabels) as DocumentKind[]).map(option => <button key={option} className={kind === option ? 'selected' : ''} onClick={() => setKind(option)}>{kindLabels[option]}</button>)}</div></div><div className="intake-actions"><input ref={fileInput} type="file" accept="image/png,image/jpeg,image/webp" multiple hidden onChange={e => { addFiles(Array.from(e.target.files ?? []), kind); e.target.value = ''; }}/><button className="primary" onClick={() => fileInput.current?.click()}>Välj bild(er)</button><span>eller klistra in till vald kategori</span></div><div className="pending-list">{pending.map(d => <div key={d.id}><span>{kindLabels[d.kind]} · {d.file.name}</span><button onClick={() => setPending(previous => previous.filter(x => x.id !== d.id))}>Ta bort</button></div>)}{pending.length > 0 && <button className="primary" disabled={busy || !pending.some(d => d.kind === 'medications')} onClick={() => void analyze()}>{busy ? 'Bearbetar…' : `Analysera ${pending.length} bild${pending.length === 1 ? '' : 'er'}`}</button>}</div></section>}
       <p role="status" className="notice">{message}</p>
       {session && review && <>
-        <div className="summary"><div><b>{review.medications.length}</b><span>läkemedelsrader</span></div><div><b>{required.length}</b><span>markerade för intyg</span></div><div><b>{unknown}</b><span>okända klassningar</span></div><div><b>{new Date(session.expiresAt).toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' })}</b><span>sessionen upphör</span></div></div>
+        <div className="summary"><div><b>{session.documents.length}</b><span>underlagsbilder</span></div><div><b>{review.medications.length}</b><span>läkemedelsrader</span></div><div><b>{required.length}</b><span>markerade för intyg</span></div><div><b>{unknown}</b><span>okända klassningar</span></div></div>
         <div className="review-grid">
-          <section className="panel image-panel"><div className="panel-head"><span className="step">02 / KÄLLA</span><h2>Originalbild</h2></div><img src={`/intyg/api/sessions/${session.id}/image`} alt="Uppladdad läkemedelslista för manuell jämförelse"/><p>Jämför varje fält mot bilden. Mock-adaptern läser ännu inga pixlar.</p></section>
-          <section className="panel details-panel"><div className="panel-head"><span className="step">03 / GEMENSAMMA UPPGIFTER</span><h2>Uppgifter till officiell blankett</h2></div>
-            {group('prescriber', 'A. Förskrivare', [['lastName','Efternamn'],['firstName','Förnamn'],['address','Adress'],['phone','Telefon']])}
+          <section className="panel image-panel"><div className="panel-head"><span className="step">02 / KÄLLOR</span><h2>Originalbilder</h2></div><div className="document-tabs">{session.documents.map(d => <button key={d.id} className={selectedDocument === d.id ? 'selected' : ''} onClick={() => setSelectedDocument(d.id)}>{kindLabels[d.kind]}<small>{d.name}</small></button>)}</div>{shownDocument && <img src={`/intyg/api/sessions/${session.id}/images/${shownDocument.id}`} alt={`${kindLabels[shownDocument.kind]}: ${shownDocument.name}`}/>}<p>Jämför fälten mot bilderna. Mocken har ännu inte läst någon av dem.</p></section>
+          <section className="panel details-panel"><div className="panel-head"><span className="step">03 / GEMENSAMMA UPPGIFTER</span><h2>Patient, resa och apotek</h2></div>
             {group('patient', 'B. Patient', [['name','Efternamn och förnamn'],['passportNumber','Pass-/nationellt ID-kortnummer'],['personalIdentityNumber','Personnummer (resa inom Norden)'],['birthPlaceAndDate','Födelseort och födelsedatum'],['sex','Kön'],['nationality','Nationalitet'],['phone','Telefon'],['streetAddress','Gatuadress'],['postalAddress','Postnummer och ort']])}
             {group('travel', 'Resa', [['destination','Resmål (internt)'],['departureDate','Giltig från'],['returnDate','Giltig till'],['durationDays','Resans längd (dagar)']])}
             {group('pharmacy', 'D. Apotek', [['name','Apotekets namn'],['phone','Telefon'],['address','Fullständig postadress'],['city','Ort']])}
           </section>
         </div>
-        <section className="medications"><div className="section-head"><div><span className="step">04 / MANUELL GRANSKNING</span><h2>Identifierade preparat</h2></div><p>Osäkra fält markeras. Korrigera data och bekräfta granskningen för ny klassning.</p></div>
+        <section className="medications"><div className="section-head"><div><span className="step">04 / MANUELL GRANSKNING</span><h2>Identifierade preparat</h2></div><p>Mockfält är inte kopplade till bilderna. Förskrivare anges per preparat.</p></div>
           {review.medications.map((m, index) => <article className="med-card" key={m.id}>
-            <div className="med-heading"><span className="med-number">{String(index + 1).padStart(2, '0')}</span><div><h3>{m.productName || 'Namnlöst preparat'}</h3><small>Extraherad rad: {m.originalText}</small></div><span className={`class-badge ${m.classification.status}`}>{m.classification.status === 'required' ? 'Intyg enligt demo-regel' : m.classification.status === 'not-required' ? 'Inget intyg enligt demo-regel' : 'Osäker klassning'}</span></div>
-            <div className="med-fields">{fields.map(([key, label, confidence]) => <label key={key}>{label}{confidence && <span className={m.confidence[confidence] < 0.8 ? 'confidence low' : 'confidence'}>{Math.round(m.confidence[confidence] * 100)} % säkerhet</span>}<input value={m[key]} onChange={e => changeMedication(m.id, key, e.target.value)} placeholder="Ej känt — fyll i manuellt" autoComplete="off"/></label>)}</div>
+            <div className="med-heading"><span className="med-number">{String(index + 1).padStart(2, '0')}</span><div><h3>{m.productName || 'Namnlöst preparat'}</h3><small>Föreslagen rad: {m.originalText}</small></div><span className={`class-badge ${m.classification.status}`}>{m.classification.status === 'required' ? 'Intyg enligt demo-regel' : m.classification.status === 'not-required' ? 'Inget intyg enligt demo-regel' : 'Osäker klassning'}</span></div>
+            <div className="med-fields">{fields.map(([key, label, confidence]) => { const path = `medications.${m.id}.${key}`, source = review.fieldEvidence[path], sourceDocument = session.documents.find(d => d.id === source?.documentId); return <label key={key}>{label}{confidence && <span className={m.confidence[confidence] < 0.8 ? 'confidence low' : 'confidence'}>{source?.method === 'mock-fixture' ? 'Ej bildläst' : `${Math.round(m.confidence[confidence] * 100)} %`}</span>}<input value={m[key]} onChange={e => changeMedication(m.id, key, e.target.value)} onFocus={() => { if (sourceDocument) setSelectedDocument(sourceDocument.id); }} placeholder="Ej känt — fyll i manuellt" autoComplete="off"/><small className="field-source">{edited.has(path) ? 'Korrigerat · ' : ''}{source?.method === 'mock-fixture' ? 'Mockfixture, ingen bildkälla' : sourceDocument ? `Källa: ${sourceDocument.name}` : 'Fylls i manuellt'}</small></label>; })}</div>
+            <div className="prescriber-block"><div className="prescriber-heading"><h4>A. Förskrivare för detta preparat</h4><button onClick={() => copyPrescriber(m.id)}>Använd samma förskrivare på alla</button></div><div className="form-grid">{prescriberFields.map(([key, label]) => <label key={key}>{label}<input value={m.prescriber[key]} onChange={e => changePrescriber(m.id, key, e.target.value)} placeholder="Ange manuellt" autoComplete="off"/><small className="field-source">{edited.has(`medications.${m.id}.prescriber.${key}`) ? 'Korrigerat manuellt' : 'Fylls i manuellt'}</small></label>)}</div></div>
             <p className="reason"><b>Regelmotorns motivering:</b> {m.classification.reason} <small>({m.classification.referenceVersion})</small></p>
           </article>)}
         </section>
-        <section className="output panel"><div><span className="step">05 / UTKAST</span><h2>Separata PDF:er</h2><p>En PDF per preparat som demo-regeln markerar. PDF:erna fyller Läkemedelsverkets officiella blankett men är märkta som demo-utkast. Signatur och stämpel lämnas tomma.</p>{readinessIssues.map((issue, i) => <p className="warning" key={i}>{issue}</p>)}</div>
+        <section className="output panel"><div><span className="step">05 / UTKAST</span><h2>Separata PDF:er</h2><p>En PDF per preparat som demo-regeln markerar. Den officiella blanketten fylls som demo-utkast; signatur och stämpel lämnas tomma.</p>{readinessIssues.map((issue, i) => <p className="warning" key={i}>{issue}</p>)}</div>
           <div className="output-actions"><button className="primary" disabled={busy} onClick={() => void confirmReview()}>{session.reviewed && !dirty ? 'Granska igen' : 'Bekräfta granskning'}</button>{session.reviewed && !dirty && readinessIssues.length === 0 && required.map(m => <div className="pdf-row" key={m.id}><span>{m.productName}</span><a href={`/intyg/api/sessions/${session.id}/certificates/${m.id}.pdf`} download>Ladda ner PDF</a><button onClick={() => { window.open(`/intyg/api/sessions/${session.id}/certificates/${m.id}.pdf?delivery=print`, '_blank'); }}>Skriv ut</button></div>)}<button className="quiet" onClick={() => void finish()}>Avsluta och radera session</button></div>
         </section>
       </>}
@@ -111,5 +147,4 @@ function App() {
     </main>
   </div>;
 }
-
 createRoot(document.getElementById('root')!).render(<React.StrictMode><App/></React.StrictMode>);

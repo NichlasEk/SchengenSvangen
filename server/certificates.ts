@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import type { Medication, ReviewModel } from '../shared/model.js';
 
-export type Certificate = { id: string; medication: Medication; patient: ReviewModel['patient']; travel: ReviewModel['travel']; prescriber: ReviewModel['prescriber']; pharmacy: ReviewModel['pharmacy']; templateVersion: string };
+export type Certificate = { id: string; medication: Medication; patient: ReviewModel['patient']; travel: ReviewModel['travel']; prescriber: Medication['prescriber']; pharmacy: ReviewModel['pharmacy']; templateVersion: string };
 export interface CertificateGenerator { generate(review: ReviewModel): Certificate[] }
 export interface CertificateTemplate { render(certificate: Certificate): Promise<Uint8Array> }
 export interface CertificateDeliveryAdapter { deliver(certificate: Certificate, pdf: Uint8Array): unknown }
@@ -17,7 +17,7 @@ export class DemoCertificateGenerator implements CertificateGenerator {
   generate(review: ReviewModel): Certificate[] {
     return review.medications.filter(m => m.classification.status === 'required').map(m => ({
       id: m.id, medication: m, patient: review.patient, travel: review.travel,
-      prescriber: review.prescriber, pharmacy: review.pharmacy, templateVersion: 'lv-2023-05-31-demo',
+      prescriber: m.prescriber, pharmacy: review.pharmacy, templateVersion: 'lv-2023-05-31-demo',
     }));
   }
 }
