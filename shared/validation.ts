@@ -10,6 +10,7 @@ export function draftReadiness(review: ReviewModel): string[] {
   if (!Number.isInteger(days) || days < 1 || days > 30) issues.push('Giltighetstid måste vara 1–30 dagar.');
   const duration = Number(travel.durationDays);
   if (!Number.isInteger(duration) || duration < 1 || duration > 30) issues.push('Resans längd måste vara 1–30 dagar.');
+  else if (Number.isInteger(days) && days >= 1 && days <= 30 && duration !== days) issues.push('Resans längd måste stämma med avrese- och hemkomstdatum.');
   if (review.medications.some(m => m.classification.status === 'unknown')) issues.push('Okänd klassning måste utredas.');
   for (const m of review.medications.filter(m => m.classification.status === 'required')) {
     if (!m.prescriber.lastName.trim() || !m.prescriber.firstName.trim()) issues.push(`Förskrivare saknas för ${m.productName || 'preparat'}.`);

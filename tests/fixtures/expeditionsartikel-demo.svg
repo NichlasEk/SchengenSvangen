@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="590" viewBox="0 0 920 590">
+<rect width="920" height="590" fill="white"/>
+<rect x="0" y="7" width="920" height="31" fill="#32a927"/>
+<text x="9" y="29" font-family="Arial" font-size="15" font-weight="bold" fill="white">Artikel för expedition · syntetiskt test</text>
+<g font-family="Arial" fill="#52647c" font-size="12">
+<text x="32" y="101">Benämning</text><text x="488" y="101">Förpackning</text>
+<text x="32" y="150">Substansbeskrivning</text><text x="611" y="150">Varunr</text>
+<text x="32" y="286">Antal förp.</text><text x="32" y="382">Doseringsanvisning</text>
+</g>
+<g fill="white" stroke="#cbd3da"><rect x="18" y="106" width="454" height="28"/><rect x="487" y="106" width="244" height="28"/>
+<rect x="18" y="154" width="579" height="29"/><rect x="611" y="154" width="90" height="29"/>
+<rect x="18" y="291" width="107" height="28"/><rect x="18" y="387" width="407" height="110"/></g>
+<g font-family="Arial" fill="#132534" font-size="14">
+<text x="25" y="125">% Demo Kontroll C, tablett 5 mg Testbolag AB</text><text x="495" y="125">Burk, 30 tabletter</text>
+<text x="25" y="174">Fiktiv substans C</text><text x="619" y="174">TEST001</text>
+<text x="32" y="310">2</text><text x="25" y="408">Ta 1 tablett dagligen.</text><text x="25" y="432">Fortsätt enligt ordination.</text>
+</g>
+<text x="18" y="557" font-family="Arial" font-size="12" fill="#758591">ENBART SYNTETISKA UPPGIFTER</text>
+</svg>

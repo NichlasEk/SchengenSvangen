@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { SnapshotDrugReference, ReferenceClassificationService, validateSnapshot } from '../server/drug-reference.js';
 import { blankMedication } from '../shared/model.js';
+import { readFileSync } from 'node:fs';
 
 const snapshot = validateSnapshot({ schemaVersion: 1, source: 'vara', sourceVersion: 'test-2026-09-24',
   generatedAt: '2026-09-24T10:00:00Z', products: [
@@ -33,4 +34,19 @@ test('tvetydiga produktposter ger ingen automatisk klassning', () => {
   const service = new ReferenceClassificationService(new SnapshotDrugReference(duplicate, () => Date.parse('2026-09-24T12:00:00Z')));
   const med = blankMedication('id'); med.productName = 'Testpreparat'; med.strength = '5 mg'; med.form = 'tablett';
   assert.equal(service.classify(med).status, 'unknown');
+});
+
+test('källkontrollerad pilotpost för Concerta gäller bara aktuell produktvariant och begränsad tid', () => {
+  const pilot = validateSnapshot(JSON.parse(readFileSync('reference/demo-products.json', 'utf8')));
+  const med = blankMedication('id'); med.productName = 'Concerta'; med.strength = '36 mg'; med.form = 'depottablett';
+  const current = new ReferenceClassificationService(new SnapshotDrugReference(pilot, () => Date.parse('2026-09-24T12:00:00Z')));
+  assert.equal(current.classify(med).status, 'required');
+  assert.equal(current.match(med)?.activeSubstance, 'Metylfenidat');
+  assert.equal(current.match(med)?.atcCode, 'N06BA04');
+  assert.equal(current.classify(med).sourceUrls?.length, 2);
+  med.strength = '18 mg';
+  assert.equal(current.classify(med).status, 'unknown');
+  med.strength = '36 mg';
+  const expired = new ReferenceClassificationService(new SnapshotDrugReference(pilot, () => Date.parse('2026-10-25T12:00:00Z')));
+  assert.equal(expired.classify(med).status, 'unknown');
 });

@@ -8,6 +8,7 @@ import { SessionStore } from '../server/sessions.js';
 import { readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { LocalOCRProvider, parsePrescriberCandidates, parseTsv, toObservations } from '../server/local-ocr.js';
+import { OCRMedicationParser } from '../server/medication-parser.js';
 const mock = new MockImageExtractionProvider(), pipe = new PipeMedicationParser();
 const documents: InputDocument[] = [
   { id: 'patient-1', kind: 'patient', name: 'patient.png', mimeType: 'image/png', bytes: readFileSync('tests/fixtures/kund-demo.png') },
@@ -38,6 +39,9 @@ test('flera syntetiska underlag går via lokal OCR, normalisering och klassning 
     m.prescriber.firstName = 'Test'; m.prescriber.lastName = `Förskrivare ${m.productName}`;
   }
   assert.deepEqual(draftReadiness(review), []);
+  review.travel.durationDays = '9';
+  assert.match(draftReadiness(review).join(' '), /stämma med avrese- och hemkomstdatum/);
+  review.travel.durationDays = '10';
   const certificates = new DemoCertificateGenerator().generate(review);
   assert.equal(certificates.length, 2);
   assert.notEqual(certificates[0].id, certificates[1].id);
@@ -110,6 +114,32 @@ test('bild utan läkemedel ger inga fiktiva rader', { skip: ocrMissing }, async 
   const review = await createReview([emptyImage]);
   assert.equal(review.medications.length, 0);
   assert.ok(review.ocrObservations.length > 0);
+});
+
+test('expeditionsartikel läser substans och dosering utan att förpackning blir expedierad mängd', { skip: ocrMissing }, async () => {
+  const document: InputDocument = { id: 'article', kind: 'medications', name: 'expeditionsartikel-demo.png', mimeType: 'image/png', bytes: readFileSync('tests/fixtures/expeditionsartikel-demo.png') };
+  const review = await createReview([document]);
+  assert.equal(review.medications.length, 1);
+  const medication = review.medications[0];
+  assert.equal(medication.productName, 'Demo Kontroll C');
+  assert.equal(medication.form, 'tablett');
+  assert.equal(medication.strength, '5 mg');
+  assert.equal(medication.activeSubstance, 'Fiktiv substans C');
+  assert.match(medication.dosageText, /Ta 1 tablett dagligen/);
+  assert.equal(medication.quantity, '');
+  assert.equal(medication.classification.status, 'required');
+  assert.equal(review.fieldEvidence[`medications.${medication.id}.activeSubstance`].documentId, 'article');
+});
+
+test('enskild benämningsrad tar bort UI-symbol och separerar läkemedelsform', () => {
+  const block = { kind: 'medications' as const, text: '% Concerta, depottablett 36 mg Janssen-Cilag AB',
+    evidence: { documentId: 'article', method: 'ocr' as const, rawText: '% Concerta, depottablett 36 mg Janssen-Cilag AB', confidence: .9,
+      bounds: { x: 20, y: 100, width: 400, height: 20 } } };
+  const parsed = new OCRMedicationParser().parse([block]);
+  assert.equal(parsed.length, 1);
+  assert.equal(parsed[0].values.productName, 'Concerta');
+  assert.equal(parsed[0].values.form, 'depottablett');
+  assert.equal(parsed[0].values.strength, '36 mg');
 });
 
 test('förskrivarvärden kopplas till sin bild utan att arbetsplatstelefon blir förskrivartelefon', () => {

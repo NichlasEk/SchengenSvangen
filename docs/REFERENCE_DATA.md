@@ -8,7 +8,7 @@ FASS visar produkt, substans, ATC och narkotikaklass på sina produktsidor. [FAS
 
 ## Implementerat gränssnitt
 
-`DRUG_REFERENCE_FILE` kan peka på en **lokal, behörigt framtagen och kontrollerad** normaliserad JSON-snapshot. Utan den används `reference/demo-products.json` med endast fyra fiktiva poster. Filen lagras utanför Git om den innehåller licensierade produktdata. Ingen patientinformation skickas till referenskällan.
+`DRUG_REFERENCE_FILE` kan peka på en **lokal, behörigt framtagen och kontrollerad** normaliserad JSON-snapshot. Utan den används `reference/demo-products.json` med fyra fiktiva poster och en avgränsad pilotpost för Concerta depottablett 36 mg. Pilotposten är manuellt kontrollerad mot [FASS produktsida](https://fass.se/health/product/20021101000328/pl) och [LVFS 2011:10 med ändringar](https://www.lakemedelsverket.se/sv/lagar-och-regler/foreskrifter/2011-10-konsoliderad) den 24 september 2026. Den upphör att ge automatisk träff efter 30 dagar. Filen lagras utanför Git om den innehåller licensierade produktdata. Ingen patientinformation skickas till referenskällan.
 
 Exempelformat (fiktiva data):
 
@@ -32,6 +32,6 @@ Exempelformat (fiktiva data):
 }
 ```
 
-Tillåtna klassvärden är `none`, `I`, `II`, `III`, `IV`, `V`. Importsteget från verklig VARA-XML och lexikon måste byggas och granskas mot en faktiskt åtkommen export innan denna fil tas i bruk. Det får inte gissa kodmappning. Motorn kräver en enda post med exakt normaliserat produktnamn, styrka och form. Dubbletter, saknade uppgifter och snapshot äldre än 48 timmar ger `unknown`, aldrig ett automatiskt nej. Utgå från VARA:s uppdateringsfrekvens och kontrollera även att myndighetens föreskrifter är aktuella.
+Tillåtna klassvärden är `none`, `I`, `II`, `III`, `IV`, `V`. Importsteget från verklig VARA-XML och lexikon måste byggas och granskas mot en faktiskt åtkommen export innan denna fil tas i bruk. Det får inte gissa kodmappning. Motorn kräver en enda post med exakt normaliserat produktnamn, styrka och form. Dubbletter, saknade uppgifter och VARA-snapshot äldre än 48 timmar ger `unknown`, aldrig ett automatiskt nej. Utgå från VARA:s uppdateringsfrekvens och kontrollera även att myndighetens föreskrifter är aktuella. Pilotposten är bara ett provfall, inte ett komplett register.
 
 För att prova arkitekturen nu: kör de medföljande syntetiska bilderna och demoregistret. Vill du prova produktspecifik klassning med behörig data senare, lägg en normaliserad snapshot på servern och sätt `DRUG_REFERENCE_FILE` i tjänstens miljö. Starta om tjänsten; den läser in och validerar snapshot vid start. Detta är ett adaptergränssnitt, inte en färdig produktionsintegration.

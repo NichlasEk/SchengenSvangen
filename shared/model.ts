@@ -1,5 +1,5 @@
 export type Confidence = { productName: number; strength: number; form: number; activeSubstance: number; dosage: number; quantity: number };
-export type Classification = { status: 'required' | 'not-required' | 'unknown'; reason: string; referenceVersion: string };
+export type Classification = { status: 'required' | 'not-required' | 'unknown'; reason: string; referenceVersion: string; sourceUrls?: string[] };
 export type DocumentKind = 'patient' | 'medications' | 'prescriber';
 export type DocumentInfo = { id: string; kind: DocumentKind; name: string; mimeType: string };
 export type FieldEvidence = { documentId: string | null; method: 'mock-fixture' | 'ocr' | 'reference'; rawText: string; confidence: number; bounds?: { x: number; y: number; width: number; height: number } };

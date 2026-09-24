@@ -24,14 +24,31 @@ export function parseTsv(tsv: string, document: InputDocument): ExtractedText[] 
   }).sort((a, b) => (a.evidence.bounds!.y - b.evidence.bounds!.y) || (a.evidence.bounds!.x - b.evidence.bounds!.x));
 }
 
+function corroborateWords(blocks: ExtractedText[], tsv: string): void {
+  for (const row of tsv.split(/\r?\n/).slice(1)) {
+    const c = row.split('\t');
+    if (c.length < 12 || c[0] !== '5') continue;
+    const confidence = Number(c[10]) / 100, text = c.slice(11).join('\t').trim();
+    const x = Number(c[6]), y = Number(c[7]);
+    if (confidence < .75 || !text || !Number.isFinite(x) || !Number.isFinite(y)) continue;
+    for (const block of blocks) {
+      const box = block.evidence.bounds;
+      if (box && block.text.toLocaleLowerCase('sv-SE') === text.toLocaleLowerCase('sv-SE') &&
+        Math.abs(box.x - x) < 25 && Math.abs(box.y - y) < 25) {
+        block.evidence.confidence = Math.max(block.evidence.confidence, confidence);
+      }
+    }
+  }
+}
+
 export class LocalOCRProvider implements ImageExtractionProvider {
   async extract(documents: InputDocument[]): Promise<ExtractedText[]> {
     const output: ExtractedText[] = [];
     for (const document of documents) {
-      const args = ['stdin', 'stdout'];
-      if (process.env.OCR_TESSDATA_DIR) args.push('--tessdata-dir', process.env.OCR_TESSDATA_DIR);
-      args.push('-l', 'swe+eng', '--psm', '11', '-c', 'tessedit_create_tsv=1');
-      const tsv = await new Promise<string>((resolve, reject) => {
+      const run = (psm: string) => new Promise<string>((resolve, reject) => {
+        const args = ['stdin', 'stdout'];
+        if (process.env.OCR_TESSDATA_DIR) args.push('--tessdata-dir', process.env.OCR_TESSDATA_DIR);
+        args.push('-l', 'swe+eng', '--psm', psm, '-c', 'tessedit_create_tsv=1');
         const child = spawn('tesseract', args, { stdio: ['pipe', 'pipe', 'ignore'] });
         const chunks: Buffer[] = []; let size = 0;
         const timeout = setTimeout(() => child.kill(), 12_000);
@@ -41,7 +58,9 @@ export class LocalOCRProvider implements ImageExtractionProvider {
         child.stdin.on('error', () => {});
         child.stdin.end(document.bytes);
       });
-      output.push(...parseTsv(tsv, document));
+      const blocks = parseTsv(await run('11'), document);
+      if (document.kind === 'medications') corroborateWords(blocks, await run('4'));
+      output.push(...blocks);
     }
     return output;
   }

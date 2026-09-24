@@ -7,6 +7,8 @@
     { "nplId": "DEMO-A", "productName": "Demomedicin A", "strength": "10 mg", "form": "tablett", "activeSubstance": "Fiktiv substans A", "atcCode": "", "narcoticClass": "none" },
     { "nplId": "DEMO-B", "productName": "Demomedicin B", "strength": "20 mg", "form": "kapsel", "activeSubstance": "Fiktiv substans B", "atcCode": "", "narcoticClass": "none" },
     { "nplId": "DEMO-C", "productName": "Demo Kontroll C", "strength": "5 mg", "form": "tablett", "activeSubstance": "Fiktiv substans C", "atcCode": "", "narcoticClass": "II" },
-    { "nplId": "DEMO-D", "productName": "Demo Kontroll D", "strength": "2 mg", "form": "tablett", "activeSubstance": "Fiktiv substans D", "atcCode": "", "narcoticClass": "IV" }
+    { "nplId": "DEMO-D", "productName": "Demo Kontroll D", "strength": "2 mg", "form": "tablett", "activeSubstance": "Fiktiv substans D", "atcCode": "", "narcoticClass": "IV" },
+    { "nplId": "20021101000328", "productName": "Concerta", "strength": "36 mg", "form": "depottablett", "activeSubstance": "Metylfenidat", "atcCode": "N06BA04", "narcoticClass": "II",
+      "pilotEvidence": { "checkedAt": "2026-09-24T00:00:00Z", "fassUrl": "https://fass.se/health/product/20021101000328/pl", "lvUrl": "https://www.lakemedelsverket.se/sv/lagar-och-regler/foreskrifter/2011-10-konsoliderad" } }
   ]
 }

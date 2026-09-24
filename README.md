@@ -2,7 +2,7 @@
 
 Första körbara **demo-MVP** för farmaceutisk granskning av läkemedelslistor och separata PDF-utkast. Repositoriet var tomt vid start. Stacken är React/TypeScript, Express/TypeScript, `pdf-lib` och en minnesbaserad sessionsbutik. Tjänsten kan köras lokalt utan molnnycklar.
 
-**Använd endast syntetiska eller avidentifierade uppgifter i denna version.** Alla tre bildtyper läses lokalt med Tesseract. Läkemedelsrader skapas bara när produkt och styrka går att läsa; annars får användaren lägga till rader manuellt. Regelmotorn använder ännu bara fyra fiktiva produktposter. PDF:erna fyller [Läkemedelsverkets officiella blankett](https://www.lakemedelsverket.se/sv/blanketter/schengenintyg/) men är tydligt märkta `DEMO / UTKAST` och är **inte utfärdade eller giltiga Schengenintyg**. Ett produktionsflöde kräver behörig, löpande uppdaterad läkemedelsreferens, validering mot riktiga skärmbildslayouter och säkerhetsgranskning.
+**Använd endast syntetiska eller avidentifierade uppgifter i denna version.** Alla tre bildtyper läses lokalt med Tesseract. Läkemedelsrader skapas bara när produkt och styrka går att läsa; annars får användaren lägga till rader manuellt. Regelmotorn använder fyra fiktiva produktposter och en tidsbegränsad, källkontrollerad pilotpost för Concerta depottablett 36 mg. PDF:erna fyller [Läkemedelsverkets officiella blankett](https://www.lakemedelsverket.se/sv/blanketter/schengenintyg/) men är tydligt märkta `DEMO / UTKAST` och är **inte utfärdade eller giltiga Schengenintyg**. Ett produktionsflöde kräver behörig, löpande uppdaterad läkemedelsreferens, validering mot fler skärmbildslayouter och säkerhetsgranskning.
 
 ## Lokal start
 
@@ -13,6 +13,10 @@ npm run dev
 ```
 
 Öppna `http://127.0.0.1:5173/intyg/`. Välj bildtyp och lägg till `tests/fixtures/kund-demo.png` som kundbild, `tests/fixtures/lakemedelslista-demo.png` som läkemedelsbild och `tests/fixtures/forskrivare-demo.png` som förskrivarbild. Ctrl+V lägger en bild i vald kategori. Kundbilden föreslår namn och andra tydligt märkta fält; passnummer lämnas tomt. Läkemedelsbilden ger fyra rader med källspårning, varav två träffar det fiktiva registret. Förskrivarbilden ger ett förslag som farmaceuten själv kopplar till rätt preparat. Fyll i resterande **fiktiva** uppgifter (bland annat resa, apotek, dosering och total mängd), granska, bekräfta och hämta två PDF-utkast. Avsluta sessionen med knappen. `OCR_TESSDATA_DIR` kan peka på en egen katalog med språkfiler.
+
+För formulärlayouten ”Artikel för expedition”, prova `tests/fixtures/expeditionsartikel-demo.png` som läkemedelsbild. Benämning, styrka, form, substansbeskrivning och doseringsanvisning läses som separata fält. Förpackningsstorlek blandas inte ihop med expedierad mängd. Concerta 36 mg från det avidentifierade exempelklippet matchar en separat pilotpost och får källänkar i granskningsvyn; andra verkliga preparat förblir `unknown` tills referensdata finns.
+
+Resmål, avresedatum, hemkomstdatum och resans längd anges manuellt en gång per ärende. Systemet kontrollerar att dagantalet stämmer med datumen och ligger inom 30 dagar; det fyller inte i dagantalet automatiskt.
 
 ```sh
 npm test
@@ -53,7 +57,7 @@ Läkemedelsverket beskriver att [apotek utfärdar intyget och skickar kopia](htt
 
 ## Antaganden och nästa byte av adapter
 
-- Läkemedelsextraktionen använder lokal OCR. Den syntetiska läkemedelsbilden ger fyra verkligt bildlästa rader; en orelaterad bild ger noll. Korta, okända eller oläsbara layouter kan kräva manuell rad. En apoteksskärmbild behöver senare valideras med avidentifierat exempel.
+- Läkemedelsextraktionen använder lokal OCR. Den syntetiska läkemedelslistan ger fyra verkligt bildlästa rader, och en syntetisk expeditionsartikel ger en rad med bildläst substans och dosering. En orelaterad bild ger noll. Korta, okända eller oläsbara layouter kan kräva manuell rad. Förpackningsstorlek används inte som expedierad mängd.
 - Kund- och förskrivarbilder körs genom lokal OCR i RAM. Förskrivarens för- och efternamn, arbetsplatsadress och eventuellt direkttelefon föreslås från fältetiketter och positioner när säkerheten är tillräcklig. Arbetsplatsens telefon blir **inte** förskrivarens telefon. Förslag hör till källbilden och måste kopplas till läkemedel av användaren. Fel eller ofullständiga klipp kan ge tomma fält.
 - Kompletta, tydligt märkta kundfält ger förslag till namn, fullständigt personnummer och övriga igenkända uppgifter. Det korta exempelklippet visar bara del av födelsedatum och efternamn; det fyller inga identitetsfält. Passnummer OCR-fylls aldrig.
 - Förskrivare hör till varje läkemedel. Granskaren kan kopiera samma förskrivare till alla när det stämmer.

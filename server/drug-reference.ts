@@ -5,6 +5,7 @@ import type { Classification, Medication } from '../shared/model.js';
 export type ReferenceProduct = {
   nplId: string; productName: string; strength: string; form: string;
   activeSubstance: string; atcCode: string; narcoticClass: 'none' | 'I' | 'II' | 'III' | 'IV' | 'V';
+  pilotEvidence?: { checkedAt: string; fassUrl: string; lvUrl: string };
 };
 export type ReferenceSnapshot = {
   schemaVersion: 1; source: 'demo' | 'vara'; sourceVersion: string;
@@ -18,7 +19,8 @@ export function validateSnapshot(value: unknown): ReferenceSnapshot {
   const v = value as ReferenceSnapshot;
   if (v.schemaVersion !== 1 || !['demo', 'vara'].includes(v.source) || typeof v.sourceVersion !== 'string' ||
     !Number.isFinite(Date.parse(v.generatedAt)) || !Array.isArray(v.products) || v.products.length > 100_000 ||
-    !v.products.every(p => p && [p.nplId, p.productName, p.strength, p.form, p.activeSubstance, p.atcCode].every(x => typeof x === 'string' && x.length <= 200) && classes.has(p.narcoticClass))) {
+    !v.products.every(p => p && [p.nplId, p.productName, p.strength, p.form, p.activeSubstance, p.atcCode].every(x => typeof x === 'string' && x.length <= 200) && classes.has(p.narcoticClass) &&
+      (!p.pilotEvidence || (Number.isFinite(Date.parse(p.pilotEvidence.checkedAt)) && /^https:\/\/(?:www\.)?fass\.se\//.test(p.pilotEvidence.fassUrl) && /^https:\/\/www\.lakemedelsverket\.se\//.test(p.pilotEvidence.lvUrl))))) {
     throw new Error('Invalid drug reference');
   }
   return v;
@@ -45,7 +47,8 @@ export class SnapshotDrugReference implements DrugReferenceSource {
     if (this.info().status === 'stale' || !medication.productName.trim() || !medication.strength.trim()) return;
     const candidates = (this.byName.get(normalize(medication.productName)) ?? []).filter(p => normalize(p.strength) === normalize(medication.strength));
     const withForm = medication.form.trim() ? candidates.filter(p => normalize(p.form) === normalize(medication.form)) : candidates;
-    return withForm.length === 1 ? withForm[0] : undefined;
+    const current = withForm.filter(p => !p.pilotEvidence || (this.now() - Date.parse(p.pilotEvidence.checkedAt) >= 0 && this.now() - Date.parse(p.pilotEvidence.checkedAt) <= 30 * 86_400_000));
+    return current.length === 1 ? current[0] : undefined;
   }
 }
 export function loadDrugReference(): SnapshotDrugReference {
@@ -64,8 +67,10 @@ export class ReferenceClassificationService {
       referenceVersion: `${info.source}:${info.version}`,
       reason: !product ? info.status === 'stale' ? 'Referensdata är äldre än 48 timmar. Uppdatera innan klassning.'
         : 'Ingen entydig produktträff med namn, styrka och form. Kontrollera mot godkänd källa.'
+        : product.pilotEvidence ? `Källkontrollerad pilotpost: narkotikaklass ${product.narcoticClass} för exakt produktvariant. Kontrollera aktuella källor före utfärdande.`
         : product.narcoticClass === 'none' ? `${prefix}: produkten har ingen narkotikaklass i denna referens.`
           : `${prefix}: narkotikaklass ${product.narcoticClass} för exakt produktvariant (${product.nplId}).`,
+      sourceUrls: product?.pilotEvidence ? [product.pilotEvidence.fassUrl, product.pilotEvidence.lvUrl] : undefined,
     };
   }
 }
