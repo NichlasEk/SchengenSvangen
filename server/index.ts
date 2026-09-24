@@ -38,12 +38,15 @@ function validateReview(value: unknown, original: ReviewModel): ReviewModel | un
   if (new Set(r.medications.map(m => m.id)).size !== ids.size) return;
   return {
     patient: r.patient, travel: r.travel, pharmacy: r.pharmacy, fieldEvidence: original.fieldEvidence,
+    prescriberCandidates: original.prescriberCandidates, ocrObservations: original.ocrObservations,
     medications: r.medications.map((m: Medication) => {
       const saved = original.medications.find(x => x.id === m.id)!;
       return { ...saved, originalText: m.originalText, productName: m.productName, strength: m.strength,
         form: m.form, activeSubstance: m.activeSubstance, atcCode: m.atcCode, dosageText: m.dosageText,
         quantity: m.quantity, totalActiveSubstance: m.totalActiveSubstance, treatmentDays: m.treatmentDays,
-        notes: m.notes, prescriber: m.prescriber, classification: classifier.classify(m) };
+        notes: m.notes, prescriber: m.prescriber,
+        prescriberCandidateId: original.prescriberCandidates.some(c => c.id === m.prescriberCandidateId) ? m.prescriberCandidateId : null,
+        classification: classifier.classify(m) };
     }),
   };
 }

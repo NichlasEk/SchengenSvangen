@@ -1,4 +1,28 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="900" height="430" viewBox="0 0 900 430">
-<rect width="900" height="430" fill="#eef3f2"/><rect x="35" y="35" width="830" height="360" rx="12" fill="white" stroke="#bccdce"/>
-<g font-family="sans-serif" fill="#23414a"><text x="65" y="90" font-size="28" font-weight="bold">FIKTIV FÖRSKRIVARE · DEMO</text><text x="65" y="150" font-size="19">Preparat: Demo Kontroll C</text><text x="65" y="195" font-size="19">Förskrivare: Dr Test Förskrivare</text><text x="65" y="240" font-size="19">Adress: Vårdvägen 1, Teststad</text><text x="65" y="345" font-size="15" fill="#6c868d">Enbart syntetiska uppgifter. Mocken läser inte denna bild.</text></g>
+<svg xmlns="http://www.w3.org/2000/svg" width="1464" height="386" viewBox="0 0 1464 386">
+<rect width="1464" height="386" fill="#ffffff"/>
+<rect x="10" y="17" width="781" height="30" fill="#2ca52b"/><rect x="806" y="17" width="658" height="30" fill="#2ca52b"/>
+<g font-family="Arial, sans-serif" fill="#314351">
+<g fill="white" font-size="14" font-weight="bold"><text x="18" y="38">Förskrivare</text><text x="814" y="38">Arbetsplats</text></g>
+<g font-size="12" fill="#52667b">
+<text x="26" y="69">Förskrivarkod</text><text x="271" y="69">Yrke</text><text x="26" y="117">Specialistkoder</text>
+<text x="26" y="164">Förnamn</text><text x="221" y="164">Efternamn</text>
+<text x="823" y="117">Namn</text><text x="1107" y="117">Adress</text>
+<text x="823" y="164">Postnummer</text><text x="928" y="164">Postort</text>
+<text x="823" y="212">Telefon arbetsplats</text><text x="980" y="212">Telefon förskrivare</text>
+</g>
+<g fill="#ffffff" stroke="#c7d3dc" stroke-width="1">
+<rect x="25" y="72" width="180" height="26"/><rect x="270" y="72" width="180" height="26"/><rect x="25" y="120" width="255" height="25"/>
+<rect x="25" y="167" width="180" height="26"/><rect x="220" y="167" width="269" height="26"/>
+<rect x="822" y="120" width="270" height="26"/><rect x="1106" y="120" width="270" height="26"/>
+<rect x="822" y="167" width="90" height="26"/><rect x="927" y="167" width="223" height="26"/>
+<rect x="822" y="215" width="145" height="26"/><rect x="979" y="215" width="145" height="26"/>
+</g>
+<g font-size="14" fill="#142b3c">
+<text x="34" y="90">TEST001</text><text x="279" y="90">Läkare</text><text x="34" y="138">Allmänmedicin</text>
+<text x="34" y="185">Klara</text><text x="229" y="185">Testsson</text>
+<text x="831" y="138">Testmottagningen</text><text x="1115" y="138">Testvägen 1</text>
+<text x="831" y="185">12345</text><text x="936" y="185">Teststad</text><text x="831" y="233">0101234567</text>
+</g>
+</g>
+<text x="25" y="335" font-family="Arial, sans-serif" font-size="13" fill="#657786">ENBART SYNTETISKA TESTUPPGIFTER</text>
 </svg>

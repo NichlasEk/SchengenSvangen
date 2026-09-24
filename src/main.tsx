@@ -52,7 +52,7 @@ function App() {
   async function analyze() {
     if (!pending.some(d => d.kind === 'medications')) { setMessage('Lägg till minst en läkemedelsbild.'); return; }
     if (pending.reduce((sum, d) => sum + d.file.size, 0) > 24 * 1024 * 1024) { setMessage('Bilderna får vara högst 24 MB tillsammans.'); return; }
-    setBusy(true); setMessage('Skapar granskningssession med demo-extraktion…');
+    setBusy(true); setMessage('Läser kund- och förskrivarbilder lokalt; läkemedel använder demo-extraktion…');
     try {
       const body = new FormData();
       for (const document of pending) { body.append('images', document.file); body.append('kinds', document.kind); }
@@ -61,7 +61,7 @@ function App() {
       if (!response.ok) throw new Error(data.error || 'Analysen misslyckades.');
       setSession(data); setReview(data.review); setSelectedDocument(data.documents[0]?.id ?? null);
       setPending([]); setEdited(new Set()); setDirty(false);
-      setMessage('Underlagen är inlästa. Läkemedelsraderna är fortfarande mockdata och har ingen bildkälla. Fyll i och jämför allt manuellt.');
+      setMessage('Kund- och förskrivarbilder har lästs lokalt. Läkemedelsraderna är fortfarande mockdata. Kontrollera alla uppgifter mot bilderna.');
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Tekniskt fel.'); }
     finally { setBusy(false); }
   }
@@ -77,14 +77,23 @@ function App() {
   function copyPrescriber(id: string) {
     setReview(previous => {
       if (!previous) return previous;
-      const prescriber = previous.medications.find(m => m.id === id)?.prescriber;
-      return prescriber ? { ...previous, medications: previous.medications.map(m => ({ ...m, prescriber: { ...prescriber } })) } : previous;
+      const source = previous.medications.find(m => m.id === id);
+      return source ? { ...previous, medications: previous.medications.map(m => ({ ...m, prescriber: { ...source.prescriber }, prescriberCandidateId: source.prescriberCandidateId })) } : previous;
     });
     setEdited(previous => {
       const next = new Set(previous);
       for (const medication of review?.medications ?? []) for (const [key] of prescriberFields) next.add(`medications.${medication.id}.prescriber.${key}`);
       return next;
     });
+    setDirty(true);
+  }
+  function usePrescriberCandidate(medicationId: string, candidateId: string) {
+    setReview(previous => {
+      if (!previous) return previous;
+      const candidate = previous.prescriberCandidates.find(c => c.id === candidateId);
+      return candidate ? { ...previous, medications: previous.medications.map(m => m.id === medicationId ? { ...m, prescriber: { ...candidate.prescriber }, prescriberCandidateId: candidate.id } : m) } : previous;
+    });
+    setEdited(previous => { const next = new Set(previous); for (const [key] of prescriberFields) next.delete(`medications.${medicationId}.prescriber.${key}`); return next; });
     setDirty(true);
   }
   function changeCommon(section: 'patient' | 'travel' | 'pharmacy', key: string, value: string) {
@@ -118,13 +127,13 @@ function App() {
     <main>
       <div className="eyebrow">SCHENGENINTYG / ARBETSFLÖDE 01</div>
       <h1>Flera underlag.<br/><em>Ett granskat intyg per preparat.</em></h1>
-      <p className="lede">Samla kund-, läkemedels- och förskrivarunderlag i samma ärende. Den här versionen använder fiktiv extraktion och klassning.</p>
+      <p className="lede">Samla kund-, läkemedels- och förskrivarunderlag i samma ärende. Kund- och förskrivarbilder läses lokalt; läkemedel och klassning är fortfarande demo.</p>
       {!session && <section className="intake multi-intake"><div><span className="step">01 / UNDERLAG</span><h2>Lägg till skärmdumpar</h2><p>Välj vilken information bilden innehåller. Du kan klistra in med <kbd>Ctrl</kbd> + <kbd>V</kbd> eller välja flera bilder. En bild får innehålla fler än en typ av uppgifter; välj dess huvudsakliga innehåll.</p><div className="kind-picker">{(Object.keys(kindLabels) as DocumentKind[]).map(option => <button key={option} className={kind === option ? 'selected' : ''} onClick={() => setKind(option)}>{kindLabels[option]}</button>)}</div></div><div className="intake-actions"><input ref={fileInput} type="file" accept="image/png,image/jpeg,image/webp" multiple hidden onChange={e => { addFiles(Array.from(e.target.files ?? []), kind); e.target.value = ''; }}/><button className="primary" onClick={() => fileInput.current?.click()}>Välj bild(er)</button><span>eller klistra in till vald kategori</span></div><div className="pending-list">{pending.map(d => <div key={d.id}><span>{kindLabels[d.kind]} · {d.file.name}</span><button onClick={() => setPending(previous => previous.filter(x => x.id !== d.id))}>Ta bort</button></div>)}{pending.length > 0 && <button className="primary" disabled={busy || !pending.some(d => d.kind === 'medications')} onClick={() => void analyze()}>{busy ? 'Bearbetar…' : `Analysera ${pending.length} bild${pending.length === 1 ? '' : 'er'}`}</button>}</div></section>}
       <p role="status" className="notice">{message}</p>
       {session && review && <>
         <div className="summary"><div><b>{session.documents.length}</b><span>underlagsbilder</span></div><div><b>{review.medications.length}</b><span>läkemedelsrader</span></div><div><b>{required.length}</b><span>markerade för intyg</span></div><div><b>{unknown}</b><span>okända klassningar</span></div></div>
         <div className="review-grid">
-          <section className="panel image-panel"><div className="panel-head"><span className="step">02 / KÄLLOR</span><h2>Originalbilder</h2></div><div className="document-tabs">{session.documents.map(d => <button key={d.id} className={selectedDocument === d.id ? 'selected' : ''} onClick={() => setSelectedDocument(d.id)}>{kindLabels[d.kind]}<small>{d.name}</small></button>)}</div>{shownDocument && <img src={`/intyg/api/sessions/${session.id}/images/${shownDocument.id}`} alt={`${kindLabels[shownDocument.kind]}: ${shownDocument.name}`}/>}<p>Jämför fälten mot bilderna. Mocken har ännu inte läst någon av dem.</p></section>
+          <section className="panel image-panel"><div className="panel-head"><span className="step">02 / KÄLLOR</span><h2>Originalbilder</h2></div><div className="document-tabs">{session.documents.map(d => <button key={d.id} className={selectedDocument === d.id ? 'selected' : ''} onClick={() => setSelectedDocument(d.id)}>{kindLabels[d.kind]}<small>{d.name}</small></button>)}</div>{shownDocument && <img src={`/intyg/api/sessions/${session.id}/images/${shownDocument.id}`} alt={`${kindLabels[shownDocument.kind]}: ${shownDocument.name}`}/>}<p>OCR läser kund och förskrivare. Läkemedelsraderna kommer från en separat demofixture.</p>{shownDocument?.kind === 'patient' && <div className="ocr-notes"><b>Text som hittades i kundbilden</b>{review.ocrObservations.filter(o => o.documentId === shownDocument.id).map((o, i) => <div key={i}>{o.text} <small>{Math.round(o.confidence * 100)} %</small></div>)}<p>Ofullständiga klipp fyller inga identitetsfält automatiskt. Passnummer anges manuellt.</p></div>}</section>
           <section className="panel details-panel"><div className="panel-head"><span className="step">03 / GEMENSAMMA UPPGIFTER</span><h2>Patient, resa och apotek</h2></div>
             {group('patient', 'B. Patient', [['name','Efternamn och förnamn'],['passportNumber','Pass-/nationellt ID-kortnummer'],['personalIdentityNumber','Personnummer (resa inom Norden)'],['birthPlaceAndDate','Födelseort och födelsedatum'],['sex','Kön'],['nationality','Nationalitet'],['phone','Telefon'],['streetAddress','Gatuadress'],['postalAddress','Postnummer och ort']])}
             {group('travel', 'Resa', [['destination','Resmål (internt)'],['departureDate','Giltig från'],['returnDate','Giltig till'],['durationDays','Resans längd (dagar)']])}
@@ -135,7 +144,7 @@ function App() {
           {review.medications.map((m, index) => <article className="med-card" key={m.id}>
             <div className="med-heading"><span className="med-number">{String(index + 1).padStart(2, '0')}</span><div><h3>{m.productName || 'Namnlöst preparat'}</h3><small>Föreslagen rad: {m.originalText}</small></div><span className={`class-badge ${m.classification.status}`}>{m.classification.status === 'required' ? 'Intyg enligt demo-regel' : m.classification.status === 'not-required' ? 'Inget intyg enligt demo-regel' : 'Osäker klassning'}</span></div>
             <div className="med-fields">{fields.map(([key, label, confidence]) => { const path = `medications.${m.id}.${key}`, source = review.fieldEvidence[path], sourceDocument = session.documents.find(d => d.id === source?.documentId); return <label key={key}>{label}{confidence && <span className={m.confidence[confidence] < 0.8 ? 'confidence low' : 'confidence'}>{source?.method === 'mock-fixture' ? 'Ej bildläst' : `${Math.round(m.confidence[confidence] * 100)} %`}</span>}<input value={m[key]} onChange={e => changeMedication(m.id, key, e.target.value)} onFocus={() => { if (sourceDocument) setSelectedDocument(sourceDocument.id); }} placeholder="Ej känt — fyll i manuellt" autoComplete="off"/><small className="field-source">{edited.has(path) ? 'Korrigerat · ' : ''}{source?.method === 'mock-fixture' ? 'Mockfixture, ingen bildkälla' : sourceDocument ? `Källa: ${sourceDocument.name}` : 'Fylls i manuellt'}</small></label>; })}</div>
-            <div className="prescriber-block"><div className="prescriber-heading"><h4>A. Förskrivare för detta preparat</h4><button onClick={() => copyPrescriber(m.id)}>Använd samma förskrivare på alla</button></div><div className="form-grid">{prescriberFields.map(([key, label]) => <label key={key}>{label}<input value={m.prescriber[key]} onChange={e => changePrescriber(m.id, key, e.target.value)} placeholder="Ange manuellt" autoComplete="off"/><small className="field-source">{edited.has(`medications.${m.id}.prescriber.${key}`) ? 'Korrigerat manuellt' : 'Fylls i manuellt'}</small></label>)}</div></div>
+            <div className="prescriber-block"><div className="prescriber-heading"><h4>A. Förskrivare för detta preparat</h4><button onClick={() => copyPrescriber(m.id)}>Använd samma förskrivare på alla</button></div>{review.prescriberCandidates.length > 0 && <div className="candidate-list">{review.prescriberCandidates.map(c => <div key={c.id}><span>Bildförslag: {[c.prescriber.firstName, c.prescriber.lastName].filter(Boolean).join(' ') || 'Osäkert namn'}{c.workplaceName && ` · ${c.workplaceName}`}<small>Arbetsplatsens telefon: {c.workplacePhone || 'ej läst'} · Förskrivarens telefon: {c.prescriber.phone || 'ej läst'}</small></span><button onClick={() => { usePrescriberCandidate(m.id, c.id); setSelectedDocument(c.documentId); }}>Använd för detta preparat</button></div>)}</div>}<div className="form-grid">{prescriberFields.map(([key, label]) => { const candidate = review.prescriberCandidates.find(c => c.id === m.prescriberCandidateId), source = candidate?.evidence[key]; return <label key={key}>{label}{source && <span className={source.confidence < .9 ? 'confidence low' : 'confidence'}>{Math.round(source.confidence * 100)} %</span>}<input value={m.prescriber[key]} onChange={e => changePrescriber(m.id, key, e.target.value)} placeholder="Ange manuellt" autoComplete="off"/><small className="field-source">{edited.has(`medications.${m.id}.prescriber.${key}`) ? 'Korrigerat manuellt' : source ? 'OCR-förslag från vald bild' : 'Fylls i manuellt'}</small></label>; })}</div></div>
             <p className="reason"><b>Regelmotorns motivering:</b> {m.classification.reason} <small>({m.classification.referenceVersion})</small></p>
           </article>)}
         </section>
@@ -143,7 +152,7 @@ function App() {
           <div className="output-actions"><button className="primary" disabled={busy} onClick={() => void confirmReview()}>{session.reviewed && !dirty ? 'Granska igen' : 'Bekräfta granskning'}</button>{session.reviewed && !dirty && readinessIssues.length === 0 && required.map(m => <div className="pdf-row" key={m.id}><span>{m.productName}</span><a href={`/intyg/api/sessions/${session.id}/certificates/${m.id}.pdf`} download>Ladda ner PDF</a><button onClick={() => { window.open(`/intyg/api/sessions/${session.id}/certificates/${m.id}.pdf?delivery=print`, '_blank'); }}>Skriv ut</button></div>)}<button className="quiet" onClick={() => void finish()}>Avsluta och radera session</button></div>
         </section>
       </>}
-      <footer>DEMO / Inga riktiga patientuppgifter. Bilder och granskningsdata ligger tillfälligt i serverns minne.</footer>
+      <footer>DEMO / Använd endast avidentifierade testbilder. Bilder och granskningsdata ligger tillfälligt i serverns minne.</footer>
     </main>
   </div>;
 }

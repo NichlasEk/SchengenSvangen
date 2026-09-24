@@ -4,11 +4,14 @@ export type DocumentKind = 'patient' | 'medications' | 'prescriber';
 export type DocumentInfo = { id: string; kind: DocumentKind; name: string; mimeType: string };
 export type FieldEvidence = { documentId: string | null; method: 'mock-fixture' | 'ocr'; rawText: string; confidence: number; bounds?: { x: number; y: number; width: number; height: number } };
 export type Prescriber = { lastName: string; firstName: string; address: string; phone: string };
+export type PrescriberCandidate = { id: string; documentId: string; prescriber: Prescriber; workplaceName: string; workplacePhone: string; evidence: Partial<Record<keyof Prescriber, FieldEvidence>> };
+export type OCRObservation = { documentId: string; text: string; confidence: number; bounds: FieldEvidence['bounds'] };
 export type Medication = {
   id: string; originalText: string; productName: string; strength: string; form: string;
   activeSubstance: string; atcCode: string; dosageText: string; quantity: string;
   totalActiveSubstance: string; treatmentDays: string; notes: string;
   prescriber: Prescriber;
+  prescriberCandidateId: string | null;
   confidence: Confidence; classification: Classification;
 };
 export type ReviewModel = {
@@ -16,6 +19,8 @@ export type ReviewModel = {
   travel: { destination: string; departureDate: string; returnDate: string; durationDays: string };
   pharmacy: { name: string; phone: string; address: string; city: string };
   medications: Medication[];
+  prescriberCandidates: PrescriberCandidate[];
+  ocrObservations: OCRObservation[];
   fieldEvidence: Record<string, FieldEvidence>;
 };
 export type CertificateCaseState = 'DRAFT' | 'REVIEWED' | 'GENERATED' | 'PRINTED' | 'AWAITING_SIGNATURE' | 'SIGNED_DOCUMENT_IMPORTED' | 'READY_FOR_SUBMISSION' | 'SUBMITTED';

@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Classification, Confidence, DocumentInfo, FieldEvidence, Medication, ReviewModel } from '../shared/model.js';
+import { LocalOCRProvider, parsePrescriberCandidates, toObservations } from './local-ocr.js';
 
 export type InputDocument = DocumentInfo & { bytes: Buffer };
 export type ExtractedText = { text: string; kind: DocumentInfo['kind']; evidence: FieldEvidence };
@@ -58,6 +59,7 @@ export class MedicationNormalizer implements Normalizer {
         dosageText: values.dosageText ?? '', quantity: values.quantity ?? '',
         totalActiveSubstance: '', treatmentDays: '', notes: '',
         prescriber: { lastName: '', firstName: '', address: '', phone: '' },
+        prescriberCandidateId: null,
         confidence, classification: { status: 'unknown', reason: 'Ej klassificerad', referenceVersion: 'demo-1' },
       } satisfies Medication;
     });
@@ -85,14 +87,17 @@ export class ReferenceClassificationService implements DrugClassificationService
   }
 }
 export const classifier = new ReferenceClassificationService(new DemoDrugReference());
-export async function createReview(documents: InputDocument[], extractor: ImageExtractionProvider = new MockImageExtractionProvider()): Promise<ReviewModel> {
+export async function createReview(documents: InputDocument[], extractor: ImageExtractionProvider = new MockImageExtractionProvider(), ocr: ImageExtractionProvider = new LocalOCRProvider()): Promise<ReviewModel> {
   const blocks = await extractor.extract(documents);
+  const imageBlocks = await ocr.extract(documents);
   const { medications, evidence } = new MedicationNormalizer().normalize(new PipeMedicationParser().parse(blocks));
   return {
     patient: { name: '', personalIdentityNumber: '', passportNumber: '', birthPlaceAndDate: '', sex: '', nationality: '', phone: '', streetAddress: '', postalAddress: '' },
     travel: { destination: '', departureDate: '', returnDate: '', durationDays: '' },
     pharmacy: { name: '', phone: '', address: '', city: '' },
     medications: medications.map(m => ({ ...m, classification: classifier.classify(m) })),
+    prescriberCandidates: parsePrescriberCandidates(imageBlocks),
+    ocrObservations: toObservations(imageBlocks),
     fieldEvidence: evidence,
   };
 }
