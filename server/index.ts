@@ -7,6 +7,7 @@ import type { InputDocument } from './pipeline.js';
 import { SessionStore } from './sessions.js';
 import { DemoCertificateGenerator, DemoPdfTemplate } from './certificates.js';
 import { draftReadiness } from '../shared/validation.js';
+import { blankMedication } from '../shared/model.js';
 import type { DocumentKind, Medication, ReviewModel } from '../shared/model.js';
 
 const app = express();
@@ -28,23 +29,40 @@ app.use(express.json({ limit: '1mb' }));
 function validateReview(value: unknown, original: ReviewModel): ReviewModel | undefined {
   if (!value || typeof value !== 'object') return;
   const r = value as ReviewModel;
-  if (!r.patient || !r.travel || !r.pharmacy || !Array.isArray(r.medications) || r.medications.length !== original.medications.length) return;
+  if (!r.patient || !r.travel || !r.pharmacy || !Array.isArray(r.medications) || r.medications.length > 30) return;
   const plain = (v: unknown) => typeof v === 'string' && v.length <= 500;
   if (![...Object.values(r.patient), ...Object.values(r.travel), ...Object.values(r.pharmacy)].every(plain)) return;
   const ids = new Set(original.medications.map(m => m.id));
-  if (!r.medications.every(m => m && ids.has(m.id) &&
+  if (!r.medications.every(m => m && typeof m.id === 'string' && (ids.has(m.id) || /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(m.id)) &&
     [m.originalText, m.productName, m.strength, m.form, m.activeSubstance, m.atcCode, m.dosageText, m.quantity, m.totalActiveSubstance, m.treatmentDays, m.notes,
       m.prescriber?.lastName, m.prescriber?.firstName, m.prescriber?.address, m.prescriber?.phone].every(plain))) return;
-  if (new Set(r.medications.map(m => m.id)).size !== ids.size) return;
+  if (new Set(r.medications.map(m => m.id)).size !== r.medications.length) return;
+  const fieldEvidence = { ...original.fieldEvidence };
   return {
-    patient: r.patient, travel: r.travel, pharmacy: r.pharmacy, fieldEvidence: original.fieldEvidence,
+    patient: r.patient, travel: r.travel, pharmacy: r.pharmacy, fieldEvidence, referenceInfo: classifier.info(),
     prescriberCandidates: original.prescriberCandidates, ocrObservations: original.ocrObservations,
     medications: r.medications.map((m: Medication) => {
-      const saved = original.medications.find(x => x.id === m.id)!;
+      const saved = original.medications.find(x => x.id === m.id) ?? blankMedication(m.id);
+      const changedProduct = m.productName !== saved.productName || m.strength !== saved.strength || m.form !== saved.form;
+      const substancePath = `medications.${m.id}.activeSubstance`, atcPath = `medications.${m.id}.atcCode`;
+      let activeSubstance = m.activeSubstance, atcCode = m.atcCode;
+      if (changedProduct && fieldEvidence[substancePath]?.method === 'reference' && activeSubstance === saved.activeSubstance) activeSubstance = '';
+      if (changedProduct && fieldEvidence[atcPath]?.method === 'reference' && atcCode === saved.atcCode) atcCode = '';
+      if (changedProduct) { delete fieldEvidence[substancePath]; delete fieldEvidence[atcPath]; }
+      const match = classifier.match(m);
+      if (match?.activeSubstance && !activeSubstance) {
+        activeSubstance = match.activeSubstance;
+        fieldEvidence[substancePath] = { documentId: null, method: 'reference', rawText: match.nplId, confidence: 1 };
+      }
+      if (match?.atcCode && !atcCode) {
+        atcCode = match.atcCode;
+        fieldEvidence[atcPath] = { documentId: null, method: 'reference', rawText: match.nplId, confidence: 1 };
+      }
       return { ...saved, originalText: m.originalText, productName: m.productName, strength: m.strength,
-        form: m.form, activeSubstance: m.activeSubstance, atcCode: m.atcCode, dosageText: m.dosageText,
+        form: m.form, activeSubstance, atcCode, dosageText: m.dosageText,
         quantity: m.quantity, totalActiveSubstance: m.totalActiveSubstance, treatmentDays: m.treatmentDays,
         notes: m.notes, prescriber: m.prescriber,
+        confidence: { ...saved.confidence, activeSubstance: fieldEvidence[substancePath]?.method === 'reference' ? 1 : changedProduct ? 0 : saved.confidence.activeSubstance },
         prescriberCandidateId: original.prescriberCandidates.some(c => c.id === m.prescriberCandidateId) ? m.prescriberCandidateId : null,
         classification: classifier.classify(m) };
     }),

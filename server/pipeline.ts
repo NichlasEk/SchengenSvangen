@@ -1,16 +1,18 @@
 import { randomUUID } from 'node:crypto';
 import type { Classification, Confidence, DocumentInfo, FieldEvidence, Medication, ReviewModel } from '../shared/model.js';
 import { LocalOCRProvider, parsePrescriberCandidates, toObservations } from './local-ocr.js';
+import { OCRMedicationParser } from './medication-parser.js';
+import { LabelPatientParser } from './patient-parser.js';
+import { loadDrugReference, ReferenceClassificationService } from './drug-reference.js';
 
 export type InputDocument = DocumentInfo & { bytes: Buffer };
 export type ExtractedText = { text: string; kind: DocumentInfo['kind']; evidence: FieldEvidence };
 export type ParsedMedication = { values: Partial<Medication>; evidence: Partial<Record<keyof Medication, FieldEvidence>> };
 export interface ImageExtractionProvider { extract(documents: InputDocument[]): Promise<ExtractedText[]> }
 export interface MedicationParser { parse(blocks: ExtractedText[]): ParsedMedication[] }
-export interface PatientParser { parse(blocks: ExtractedText[]): Partial<ReviewModel['patient']> }
+export interface PatientParser { parse(blocks: ExtractedText[]): { values: Partial<ReviewModel['patient']>; evidence: Record<string, FieldEvidence> } }
 export interface PrescriberParser { parse(blocks: ExtractedText[]): Partial<Medication['prescriber']> }
 export interface Normalizer { normalize(rows: ParsedMedication[]): { medications: Medication[]; evidence: Record<string, FieldEvidence> } }
-export interface DrugReferenceSource { version: string; lookup(productName: string): 'required' | 'not-required' | undefined }
 export interface DrugClassificationService { classify(medication: Medication): Classification }
 
 const demoLines = [
@@ -55,7 +57,7 @@ export class MedicationNormalizer implements Normalizer {
       };
       return {
         id, originalText: values.originalText ?? '', productName: values.productName ?? '',
-        strength: values.strength ?? '', form: values.form ?? '', activeSubstance: '', atcCode: '',
+        strength: values.strength ?? '', form: values.form ?? '', activeSubstance: values.activeSubstance ?? '', atcCode: values.atcCode ?? '',
         dosageText: values.dosageText ?? '', quantity: values.quantity ?? '',
         totalActiveSubstance: '', treatmentDays: '', notes: '',
         prescriber: { lastName: '', firstName: '', address: '', phone: '' },
@@ -66,38 +68,31 @@ export class MedicationNormalizer implements Normalizer {
     return { medications, evidence: fieldEvidence };
   }
 }
-export class DemoDrugReference implements DrugReferenceSource {
-  version = 'demo-1';
-  private readonly data = new Map<string, 'required' | 'not-required'>([
-    ['demo kontroll c', 'required'], ['demo kontroll d', 'required'],
-    ['demomedicin a', 'not-required'], ['demomedicin b', 'not-required'],
-  ]);
-  lookup(name: string) { return this.data.get(name.trim().toLocaleLowerCase('sv-SE')); }
-}
-export class ReferenceClassificationService implements DrugClassificationService {
-  constructor(private readonly source: DrugReferenceSource) {}
-  classify(medication: Medication): Classification {
-    const result = this.source.lookup(medication.productName);
-    return {
-      status: result ?? 'unknown', referenceVersion: this.source.version,
-      reason: result === 'required' ? 'Fiktivt preparat markerat intygskrävande i demo-registret.'
-        : result === 'not-required' ? 'Fiktivt preparat markerat ej intygskrävande i demo-registret.'
-        : 'Ingen exakt träff i demo-registret. Kontrollera mot godkänd källa.',
-    };
-  }
-}
-export const classifier = new ReferenceClassificationService(new DemoDrugReference());
-export async function createReview(documents: InputDocument[], extractor: ImageExtractionProvider = new MockImageExtractionProvider(), ocr: ImageExtractionProvider = new LocalOCRProvider()): Promise<ReviewModel> {
+export const classifier = new ReferenceClassificationService(loadDrugReference());
+export async function createReview(documents: InputDocument[], extractor: ImageExtractionProvider = new LocalOCRProvider(), medicationParser: MedicationParser = new OCRMedicationParser()): Promise<ReviewModel> {
   const blocks = await extractor.extract(documents);
-  const imageBlocks = await ocr.extract(documents);
-  const { medications, evidence } = new MedicationNormalizer().normalize(new PipeMedicationParser().parse(blocks));
+  const { medications, evidence } = new MedicationNormalizer().normalize(medicationParser.parse(blocks));
+  const patient = new LabelPatientParser().parse(blocks);
+  for (const medication of medications) {
+    const product = classifier.match(medication);
+    if (product?.activeSubstance && !medication.activeSubstance) {
+      medication.activeSubstance = product.activeSubstance;
+      medication.confidence.activeSubstance = 1;
+      evidence[`medications.${medication.id}.activeSubstance`] = { documentId: null, method: 'reference', rawText: product.nplId, confidence: 1 };
+    }
+    if (product?.atcCode && !medication.atcCode) {
+      medication.atcCode = product.atcCode;
+      evidence[`medications.${medication.id}.atcCode`] = { documentId: null, method: 'reference', rawText: product.nplId, confidence: 1 };
+    }
+  }
   return {
-    patient: { name: '', personalIdentityNumber: '', passportNumber: '', birthPlaceAndDate: '', sex: '', nationality: '', phone: '', streetAddress: '', postalAddress: '' },
+    referenceInfo: classifier.info(),
+    patient: { name: '', personalIdentityNumber: '', passportNumber: '', birthPlaceAndDate: '', sex: '', nationality: '', phone: '', streetAddress: '', postalAddress: '', ...patient.values },
     travel: { destination: '', departureDate: '', returnDate: '', durationDays: '' },
     pharmacy: { name: '', phone: '', address: '', city: '' },
     medications: medications.map(m => ({ ...m, classification: classifier.classify(m) })),
-    prescriberCandidates: parsePrescriberCandidates(imageBlocks),
-    ocrObservations: toObservations(imageBlocks),
-    fieldEvidence: evidence,
+    prescriberCandidates: parsePrescriberCandidates(blocks),
+    ocrObservations: toObservations(blocks),
+    fieldEvidence: { ...evidence, ...patient.evidence },
   };
 }

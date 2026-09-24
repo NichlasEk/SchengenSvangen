@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createReview, classifier } from '../server/pipeline.js';
+import { createReview, classifier, MockImageExtractionProvider, PipeMedicationParser } from '../server/pipeline.js';
 import type { InputDocument } from '../server/pipeline.js';
 import { DemoCertificateGenerator, DemoPdfTemplate } from '../server/certificates.js';
 import { draftReadiness } from '../shared/validation.js';
@@ -8,28 +8,33 @@ import { SessionStore } from '../server/sessions.js';
 import { readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { LocalOCRProvider, parsePrescriberCandidates, parseTsv, toObservations } from '../server/local-ocr.js';
-const noOcr = { extract: async () => [] };
+const mock = new MockImageExtractionProvider(), pipe = new PipeMedicationParser();
 const documents: InputDocument[] = [
-  { id: 'patient-1', kind: 'patient', name: 'patient.png', mimeType: 'image/png', bytes: Buffer.from('patient') },
-  { id: 'med-1', kind: 'medications', name: 'mediciner.png', mimeType: 'image/png', bytes: Buffer.from('medications') },
-  { id: 'doctor-1', kind: 'prescriber', name: 'recept.png', mimeType: 'image/png', bytes: Buffer.from('prescriber') },
+  { id: 'patient-1', kind: 'patient', name: 'patient.png', mimeType: 'image/png', bytes: readFileSync('tests/fixtures/kund-demo.png') },
+  { id: 'med-1', kind: 'medications', name: 'mediciner.png', mimeType: 'image/png', bytes: readFileSync('tests/fixtures/lakemedelslista-demo.png') },
+  { id: 'doctor-1', kind: 'prescriber', name: 'recept.png', mimeType: 'image/png', bytes: readFileSync('tests/fixtures/forskrivare-demo.png') },
 ];
 
-test('flera syntetiska underlag går via extraktion, normalisering och klassning till två separata PDF-utkast', async () => {
-  const review = await createReview(documents, undefined, noOcr);
+const ocrArgs = process.env.OCR_TESSDATA_DIR ? ['--tessdata-dir', process.env.OCR_TESSDATA_DIR] : [];
+const availableLanguages = spawnSync('tesseract', [...ocrArgs, '--list-langs'], { encoding: 'utf8' }).stdout;
+const ocrMissing = !availableLanguages?.includes('swe') || !availableLanguages?.includes('eng');
+test('flera syntetiska underlag går via lokal OCR, normalisering och klassning till två separata PDF-utkast', { skip: ocrMissing }, async () => {
+  const review = await createReview(documents);
   assert.equal(review.medications.length, 4);
   assert.equal(review.medications.filter(m => m.classification.status === 'required').length, 2);
   assert.equal(review.medications.filter(m => m.classification.status === 'not-required').length, 2);
-  assert.equal(review.medications[0].confidence.activeSubstance, 0);
-  assert.equal(review.fieldEvidence[`medications.${review.medications[0].id}.productName`].method, 'mock-fixture');
-  assert.equal(review.fieldEvidence[`medications.${review.medications[0].id}.productName`].documentId, null);
-  review.patient.name = 'Testperson Testsson';
+  assert.equal(review.medications[0].activeSubstance, 'Fiktiv substans A');
+  assert.equal(review.medications[0].confidence.activeSubstance, 1);
+  assert.equal(review.fieldEvidence[`medications.${review.medications[0].id}.productName`].method, 'ocr');
+  assert.equal(review.fieldEvidence[`medications.${review.medications[0].id}.productName`].documentId, 'med-1');
+  assert.equal(review.patient.name, 'Testperson Testsson');
+  assert.equal(review.patient.passportNumber, '');
   review.patient.passportNumber = 'TEST-ID';
   review.pharmacy.name = 'Demoapotek';
   review.travel.destination = 'Fiktiv destination'; review.travel.departureDate = '2026-10-01';
   review.travel.returnDate = '2026-10-10'; review.travel.durationDays = '10';
   for (const m of review.medications.filter(m => m.classification.status === 'required')) {
-    m.activeSubstance = 'Fiktiv substans'; m.totalActiveSubstance = '50 mg'; m.treatmentDays = '10';
+    m.activeSubstance = 'Fiktiv substans'; m.dosageText = '1 tablett dagligen'; m.totalActiveSubstance = '50 mg'; m.treatmentDays = '10';
     m.prescriber.firstName = 'Test'; m.prescriber.lastName = `Förskrivare ${m.productName}`;
   }
   assert.deepEqual(draftReadiness(review), []);
@@ -43,7 +48,7 @@ test('flera syntetiska underlag går via extraktion, normalisering och klassning
 });
 
 test('okänt eller rättat preparat får aldrig en gissad klassning', async () => {
-  const review = await createReview(documents, undefined, noOcr);
+  const review = await createReview(documents, mock, pipe);
   const edited = { ...review.medications[2], productName: 'Okänt preparat' };
   edited.classification = classifier.classify(edited);
   assert.equal(edited.classification.status, 'unknown');
@@ -53,7 +58,7 @@ test('okänt eller rättat preparat får aldrig en gissad klassning', async () =
 test('sessionen tas bort vid avslut och timeout', async () => {
   let now = 1000;
   const store = new SessionStore(200, () => now);
-  const review = await createReview(documents, undefined, noOcr);
+  const review = await createReview(documents, mock, pipe);
   const first = store.create(documents, review);
   assert.ok(store.get(first.id));
   assert.equal(store.view(store.get(first.id)!).documents.length, 3);
@@ -72,7 +77,7 @@ test('framtida OCR-adapter kan ange bild och position per tolkat fält', async (
   const review = await createReview(documents, { extract: async () => [{
     text, kind: 'medications', evidence: { documentId: 'med-1', method: 'ocr', rawText: text,
       confidence: 0.93, bounds: { x: 10, y: 20, width: 300, height: 30 } },
-  }] }, noOcr);
+  }] }, pipe);
   const medication = review.medications[0];
   assert.equal(medication.confidence.productName, 0.93);
   assert.equal(review.fieldEvidence[`medications.${medication.id}.productName`].documentId, 'med-1');
@@ -80,19 +85,17 @@ test('framtida OCR-adapter kan ange bild och position per tolkat fält', async (
   assert.equal(medication.classification.status, 'unknown');
 });
 
-const ocrArgs = process.env.OCR_TESSDATA_DIR ? ['--tessdata-dir', process.env.OCR_TESSDATA_DIR] : [];
-const availableLanguages = spawnSync('tesseract', [...ocrArgs, '--list-langs'], { encoding: 'utf8' }).stdout;
-test('lokal OCR läser syntetiskt kundklipp men fyller inte ofullständig identitet', { skip: !availableLanguages?.includes('swe') || !availableLanguages?.includes('eng') }, async () => {
-  const patient = { ...documents[0], bytes: readFileSync('tests/fixtures/kund-demo.png') };
-  const review = await createReview([patient, documents[1]], undefined, new LocalOCRProvider());
+test('lokal OCR läser syntetiska kundfält men lämnar passnummer manuellt', { skip: ocrMissing }, async () => {
+  const review = await createReview([documents[0], documents[1]]);
   assert.ok(review.ocrObservations.length > 0);
-  assert.equal(review.patient.personalIdentityNumber, '');
+  assert.equal(review.patient.name, 'Testperson Testsson');
+  assert.equal(review.patient.personalIdentityNumber, '20990101-0000');
+  assert.equal(review.patient.postalAddress, '111 11 Teststad');
   assert.equal(review.patient.passportNumber, '');
 });
 
-test('lokal OCR läser fiktivt förskrivarformulär som valbart förslag', { skip: !availableLanguages?.includes('swe') || !availableLanguages?.includes('eng') }, async () => {
-  const prescriber = { ...documents[2], bytes: readFileSync('tests/fixtures/forskrivare-demo.png') };
-  const review = await createReview([documents[1], prescriber], undefined, new LocalOCRProvider());
+test('lokal OCR läser fiktivt förskrivarformulär som valbart förslag', { skip: ocrMissing }, async () => {
+  const review = await createReview([documents[1], documents[2]]);
   const candidate = review.prescriberCandidates[0];
   assert.equal(candidate.prescriber.firstName, 'Klara');
   assert.equal(candidate.prescriber.lastName, 'Testsson');
@@ -100,6 +103,13 @@ test('lokal OCR läser fiktivt förskrivarformulär som valbart förslag', { ski
   assert.equal(candidate.workplacePhone, '0101234567');
   assert.equal(candidate.prescriber.phone, '');
   assert.ok(review.medications.every(m => m.prescriberCandidateId === null && m.prescriber.firstName === ''));
+});
+
+test('bild utan läkemedel ger inga fiktiva rader', { skip: ocrMissing }, async () => {
+  const emptyImage = { ...documents[0], kind: 'medications' as const, id: 'empty' };
+  const review = await createReview([emptyImage]);
+  assert.equal(review.medications.length, 0);
+  assert.ok(review.ocrObservations.length > 0);
 });
 
 test('förskrivarvärden kopplas till sin bild utan att arbetsplatstelefon blir förskrivartelefon', () => {
@@ -119,5 +129,5 @@ test('förskrivarvärden kopplas till sin bild utan att arbetsplatstelefon blir 
   assert.equal(candidate.workplacePhone, '0101234567');
   assert.equal(candidate.prescriber.phone, '');
   assert.equal(candidate.evidence.firstName?.documentId, doc.id);
-  assert.equal(toObservations(parseTsv(tsv, doc)).length, 0);
+  assert.equal(toObservations(parseTsv(tsv, doc)).length, lines.length);
 });

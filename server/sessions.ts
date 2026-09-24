@@ -8,7 +8,7 @@ export class SessionStore {
   constructor(private ttlMs = 15 * 60_000, private now = () => Date.now()) {}
   create(documents: InputDocument[], review: ReviewModel): SessionView {
     const id = randomUUID(), expires = this.now() + this.ttlMs;
-    const session: Session = { id, expires, expiresAt: new Date(expires).toISOString(), source: 'local-ocr+mock-medications', state: 'DRAFT', reviewed: false, review, documents };
+    const session: Session = { id, expires, expiresAt: new Date(expires).toISOString(), source: 'local-ocr', state: 'DRAFT', reviewed: false, review, documents };
     this.sessions.set(id, session);
     return this.view(session);
   }

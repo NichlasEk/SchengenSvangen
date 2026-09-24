@@ -27,7 +27,7 @@ export function parseTsv(tsv: string, document: InputDocument): ExtractedText[] 
 export class LocalOCRProvider implements ImageExtractionProvider {
   async extract(documents: InputDocument[]): Promise<ExtractedText[]> {
     const output: ExtractedText[] = [];
-    for (const document of documents.filter(d => d.kind !== 'medications')) {
+    for (const document of documents) {
       const args = ['stdin', 'stdout'];
       if (process.env.OCR_TESSDATA_DIR) args.push('--tessdata-dir', process.env.OCR_TESSDATA_DIR);
       args.push('-l', 'swe+eng', '--psm', '11', '-c', 'tessedit_create_tsv=1');
@@ -85,7 +85,7 @@ export function parsePrescriberCandidates(blocks: ExtractedText[]): PrescriberCa
   });
 }
 export function toObservations(blocks: ExtractedText[]): OCRObservation[] {
-  return blocks.filter(b => b.kind === 'patient' && b.evidence.documentId).map(b => ({
+  return blocks.filter(b => b.evidence.documentId).map(b => ({
     documentId: b.evidence.documentId!, text: b.text, confidence: b.evidence.confidence, bounds: b.evidence.bounds,
   }));
 }

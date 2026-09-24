@@ -2,7 +2,7 @@
 
 Första körbara **demo-MVP** för farmaceutisk granskning av läkemedelslistor och separata PDF-utkast. Repositoriet var tomt vid start. Stacken är React/TypeScript, Express/TypeScript, `pdf-lib` och en minnesbaserad sessionsbutik. Tjänsten kan köras lokalt utan molnnycklar.
 
-**Använd endast syntetiska eller avidentifierade uppgifter i denna version.** Kund- och förskrivarbilder läses lokalt med Tesseract. Läkemedelsbilden använder fortfarande en mock som returnerar fyra fasta, fiktiva rader oavsett bildens innehåll. Regelmotorn har bara fyra fiktiva namn. PDF:erna fyller [Läkemedelsverkets officiella blankett](https://www.lakemedelsverket.se/sv/blanketter/schengenintyg/) men är tydligt märkta `DEMO / UTKAST` och är **inte utfärdade eller giltiga Schengenintyg**. Ett produktionsflöde kräver verifierad läkemedelsreferens, riktig läkemedelsextraktion, formell fältvalidering och säkerhetsgranskning.
+**Använd endast syntetiska eller avidentifierade uppgifter i denna version.** Alla tre bildtyper läses lokalt med Tesseract. Läkemedelsrader skapas bara när produkt och styrka går att läsa; annars får användaren lägga till rader manuellt. Regelmotorn använder ännu bara fyra fiktiva produktposter. PDF:erna fyller [Läkemedelsverkets officiella blankett](https://www.lakemedelsverket.se/sv/blanketter/schengenintyg/) men är tydligt märkta `DEMO / UTKAST` och är **inte utfärdade eller giltiga Schengenintyg**. Ett produktionsflöde kräver behörig, löpande uppdaterad läkemedelsreferens, validering mot riktiga skärmbildslayouter och säkerhetsgranskning.
 
 ## Lokal start
 
@@ -12,7 +12,7 @@ sudo apt install tesseract-ocr tesseract-ocr-swe tesseract-ocr-eng # Debian/Ubun
 npm run dev
 ```
 
-Öppna `http://127.0.0.1:5173/intyg/`. Välj bildtyp och lägg till `tests/fixtures/kund-demo.png` som kundbild, `tests/fixtures/lakemedelslista-demo.png` som läkemedelsbild och `tests/fixtures/forskrivare-demo.png` som förskrivarbild. Ctrl+V lägger en bild i vald kategori. Kundbildens OCR-text visas som observationer; ofullständig identitet fylls inte i. Förskrivarbild med separata fält kan ge ett förslag som farmaceuten själv kopplar till rätt preparat. Fyll i **fiktiva** patient-, rese- och resterande förskrivaruppgifter, granska, bekräfta och hämta två PDF-utkast. Avsluta sessionen med knappen. `OCR_TESSDATA_DIR` kan peka på en egen katalog med språkfiler.
+Öppna `http://127.0.0.1:5173/intyg/`. Välj bildtyp och lägg till `tests/fixtures/kund-demo.png` som kundbild, `tests/fixtures/lakemedelslista-demo.png` som läkemedelsbild och `tests/fixtures/forskrivare-demo.png` som förskrivarbild. Ctrl+V lägger en bild i vald kategori. Kundbilden föreslår namn och andra tydligt märkta fält; passnummer lämnas tomt. Läkemedelsbilden ger fyra rader med källspårning, varav två träffar det fiktiva registret. Förskrivarbilden ger ett förslag som farmaceuten själv kopplar till rätt preparat. Fyll i resterande **fiktiva** uppgifter (bland annat resa, apotek, dosering och total mängd), granska, bekräfta och hämta två PDF-utkast. Avsluta sessionen med knappen. `OCR_TESSDATA_DIR` kan peka på en egen katalog med språkfiler.
 
 ```sh
 npm test
@@ -31,7 +31,10 @@ Servern `192.168.32.186` kör samma repo under `/home/nichlas/SchengenSvangen` v
 | --- | --- |
 | `shared/model.ts` | Strukturerad `ReviewModel`, läkemedel och klassning |
 | `server/pipeline.ts` | Flera typade bilder → `ImageExtractionProvider` → parser → normalizer → `DrugClassificationService` med utbytbar referenskälla och fältvis källspårning |
-| `server/local-ocr.ts` | Lokal Tesseract-adapter och positionsbaserad tolkning av förskrivarfält; kundtext visas som observationer |
+| `server/local-ocr.ts` | Lokal Tesseract-adapter, positioner och förskrivarparser |
+| `server/patient-parser.ts` | Försiktig parser för märkta kundfält; passnummer lämnas tomt |
+| `server/medication-parser.ts` | Läkemedelsrader från OCR; oläsbara bilder ger inga fiktiva träffar |
+| `server/drug-reference.ts` | Versionerad produktreferens med entydig variantmatchning och 48 timmars färskhetskontroll för VARA-import |
 | `server/sessions.ts` | RAM-sessioner, TTL och radering |
 | `server/certificates.ts` | `CertificateGenerator`, officiell PDF-mall och PDF/print-adaptrar |
 | `server/signed-submission.ts` | Separat framtida tjänst för återinläst signerat/stämplat dokument; stub utan uppladdning |
@@ -50,11 +53,10 @@ Läkemedelsverket beskriver att [apotek utfärdar intyget och skickar kopia](htt
 
 ## Antaganden och nästa byte av adapter
 
-- Läkemedelsextraktionen är uttryckligen en fixture, inte OCR. Den ger fyra rader en gång även om flera läkemedelsbilder laddas upp och tillskriver inga fält någon bild. Byt dess `ImageExtractionProvider` utan att ändra review/PDF-lagren.
+- Läkemedelsextraktionen använder lokal OCR. Den syntetiska läkemedelsbilden ger fyra verkligt bildlästa rader; en orelaterad bild ger noll. Korta, okända eller oläsbara layouter kan kräva manuell rad. En apoteksskärmbild behöver senare valideras med avidentifierat exempel.
 - Kund- och förskrivarbilder körs genom lokal OCR i RAM. Förskrivarens för- och efternamn, arbetsplatsadress och eventuellt direkttelefon föreslås från fältetiketter och positioner när säkerheten är tillräcklig. Arbetsplatsens telefon blir **inte** förskrivarens telefon. Förslag hör till källbilden och måste kopplas till läkemedel av användaren. Fel eller ofullständiga klipp kan ge tomma fält.
-- Kundbildens lästa textrader visas med OCR-säkerhet och position men fyller ännu inte identitetsfält. Det korta exempelklippet visar bara del av födelsedatum och efternamn; ett fullständigt personnummer eller namn får inte konstrueras ur det. Passnummer anges manuellt. När ett komplett avidentifierat kundklipp finns kan en separat patientparser föreslå fler fält.
+- Kompletta, tydligt märkta kundfält ger förslag till namn, fullständigt personnummer och övriga igenkända uppgifter. Det korta exempelklippet visar bara del av födelsedatum och efternamn; det fyller inga identitetsfält. Passnummer OCR-fylls aldrig.
 - Förskrivare hör till varje läkemedel. Granskaren kan kopiera samma förskrivare till alla när det stämmer.
-- Regelmotorn gör exakta namnuppslag i en fiktiv versionerad referenskälla. Okända namn får `unknown`; den gissar inte utifrån OCR-förtroende eller ATC-kod.
-- Förtroendesiffror för mock-raderna är demonstrativa. Substans och ATC lämnas tomma med låg säkerhet.
+- Regelmotorn kräver en entydig träff på namn, styrka och form i en versionerad produktreferens. Okända eller tvetydiga produkter får `unknown`. Produktreferensen kan även fylla substans och ATC utan att ändra OCR-texten. Det förvalda registret är fiktivt; se [referensdataplan](docs/REFERENCE_DATA.md).
 - Granskaren kan ändra alla tolkade fält; servern räknar om klassningen från kontrollerad källa när granskningen bekräftas. Ändring i klienten spärrar PDF tills ny bekräftelse.
 - `reference/lv-schengenintyg.pdf` är den officiella PDF som hämtades från Läkemedelsverkets blankettlänk den 24 september 2026. SHA-256: `884f7c62a75763dc370845bba3ac0a566c0b16aee9db9019e613a893f04190e5`. Kontrollera alltid blankettlänken/versionen före produktionsbruk. PDF:ens formulärfält fylls och plattas till; blankettens skriptknappar tas bort.

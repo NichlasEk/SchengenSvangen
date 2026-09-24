@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "source": "demo",
+  "sourceVersion": "fictional-1",
+  "generatedAt": "2026-09-24T00:00:00.000Z",
+  "products": [
+    { "nplId": "DEMO-A", "productName": "Demomedicin A", "strength": "10 mg", "form": "tablett", "activeSubstance": "Fiktiv substans A", "atcCode": "", "narcoticClass": "none" },
+    { "nplId": "DEMO-B", "productName": "Demomedicin B", "strength": "20 mg", "form": "kapsel", "activeSubstance": "Fiktiv substans B", "atcCode": "", "narcoticClass": "none" },
+    { "nplId": "DEMO-C", "productName": "Demo Kontroll C", "strength": "5 mg", "form": "tablett", "activeSubstance": "Fiktiv substans C", "atcCode": "", "narcoticClass": "II" },
+    { "nplId": "DEMO-D", "productName": "Demo Kontroll D", "strength": "2 mg", "form": "tablett", "activeSubstance": "Fiktiv substans D", "atcCode": "", "narcoticClass": "IV" }
+  ]
+}
