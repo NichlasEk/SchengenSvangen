@@ -20,7 +20,7 @@ try {
     medication.prescriberCandidateId = review.prescriberCandidates[0].id;
     medication.dosageText = '1 tablett dagligen'; medication.certificateDosageText = medication.dosageText; medication.totalActiveSubstance = '50 mg'; medication.treatmentDays = '10';
   }
-  const unknown = { ...review.medications[0], id: randomUUID(), originalText: '', productName: 'Okänt testmedel', strength: '1 mg', form: 'tablett', activeSubstance: '', atcCode: '',
+  const unknown = { ...review.medications[0], id: randomUUID(), originalText: '', productName: 'Concerta', strength: '18 mg', form: 'depottablett', activeSubstance: 'Metylfenidat', atcCode: '', manualClassification: null,
     classification: { status: 'required', reason: 'förfalskad', referenceVersion: 'x' } };
   review.medications.push(unknown);
   const save = async data => {
@@ -32,6 +32,19 @@ try {
   if (withUnknown.medications.at(-1).classification.status !== 'unknown') throw Error('forged classification accepted');
   const blocked = await fetch(`${base}/${id}/certificates/${withUnknown.medications[2].id}.pdf`);
   if (blocked.status !== 409) throw Error(`unknown did not block PDF ${blocked.status}`);
+  const manual = withUnknown.medications.at(-1);
+  manual.manualClassification = {
+    status: 'required', sourceUrl: 'https://fass.se/health/product/20021101000311/pl',
+    rationale: 'Exakt produktvariant kontrollerad mot FASS: narkotikaklass II.', reviewer: 'TEST',
+    verifiedIdentity: JSON.stringify([manual.productName, manual.strength, manual.form, manual.activeSubstance].map(x => x.trim().toLocaleLowerCase('sv-SE').replace(/\s+/g, ' '))),
+  };
+  manual.prescriber = { ...review.prescriberCandidates[0].prescriber };
+  manual.dosageText = '1 tablett dagligen'; manual.certificateDosageText = manual.dosageText;
+  manual.totalActiveSubstance = '180 mg'; manual.treatmentDays = '10';
+  const manuallyReviewed = await save(withUnknown);
+  if (manuallyReviewed.medications.at(-1).classification.referenceVersion !== 'manual-review') throw Error('manual review not applied');
+  const manualPdf = await fetch(`${base}/${id}/certificates/${manual.id}.pdf`);
+  if (!manualPdf.ok || new TextDecoder().decode((await manualPdf.arrayBuffer()).slice(0, 5)) !== '%PDF-') throw Error(`manual pdf ${manualPdf.status}`);
   withUnknown.medications.pop();
   const clean = await save(withUnknown);
   let pdfs = 0;
@@ -41,7 +54,7 @@ try {
     if (!response.ok || new TextDecoder().decode(bytes.slice(0, 5)) !== '%PDF-') throw Error(`pdf ${response.status}`);
     pdfs++;
   }
-  console.log(JSON.stringify({ ocrRows: 4, unknownBlocked: true, manualRowReclassified: true, pdfs }));
+  console.log(JSON.stringify({ ocrRows: 4, unknownBlocked: true, manualReviewPdf: true, pdfs }));
 } finally {
   if (id) {
     const response = await fetch(`${base}/${id}`, { method: 'DELETE' });

@@ -1,4 +1,5 @@
 import type { ReviewModel } from './model.js';
+import { manualClassificationIssues } from './manual-classification.js';
 
 // MaxLength values from reference/lv-schengenintyg.pdf. Keep in sync with the
 // bundled form; never silently truncate medical or identity information.
@@ -26,7 +27,12 @@ export function draftReadiness(review: ReviewModel): string[] {
   const duration = Number(travel.durationDays);
   if (!Number.isInteger(duration) || duration < 1 || duration > 30) issues.push('Resans längd måste vara 1–30 dagar.');
   else if (Number.isInteger(days) && days >= 1 && days <= 30 && duration !== days) issues.push('Resans längd måste stämma med avrese- och hemkomstdatum.');
-  if (review.medications.some(m => m.classification.status === 'unknown')) issues.push('Okänd klassning måste utredas.');
+  for (const m of review.medications.filter(m => m.classification.status === 'unknown')) {
+    const manualIssues = manualClassificationIssues(m);
+    issues.push(manualIssues.length
+      ? `Osäker klassning för ${m.productName || 'preparat'}: ${manualIssues.join(' ')}`
+      : `Bekräfta granskningen för att tillämpa det manuella beslutet för ${m.productName || 'preparat'}.`);
+  }
   const required = review.medications.filter(m => m.classification.status === 'required');
   const checkLength = (name: string, value: string | undefined) => {
     const max = PDF_FIELD_MAX[name];
@@ -45,6 +51,7 @@ export function draftReadiness(review: ReviewModel): string[] {
   for (const m of required) {
     if (!m.prescriber.lastName.trim() || !m.prescriber.firstName.trim()) issues.push(`Förskrivare saknas för ${m.productName || 'preparat'}.`);
     if (![m.productName, m.form, m.activeSubstance, m.strength, m.dosageText, m.totalActiveSubstance].every(x => x.trim())) issues.push('Uppgifter om intygskrävande preparat saknas.');
+    if (m.totalActiveSubstance.trim() && !/[a-zµμ]/i.test(m.totalActiveSubstance)) issues.push('Total mängd verksam substans måste anges med enhet, till exempel mg.');
     if (!m.certificateDosageText?.trim()) issues.push('Skriv en granskad kort dosering för intyget. Den fullständiga doseringsanvisningen bevaras separat.');
     for (const [name, value] of [
       ['Efternamn läkare 1', m.prescriber.lastName], ['Förnamn läkare 2', m.prescriber.firstName],

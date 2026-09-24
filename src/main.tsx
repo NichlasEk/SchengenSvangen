@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { blankMedication } from '../shared/model';
-import type { DocumentKind, Medication, ReviewModel, SessionView } from '../shared/model';
+import type { DocumentKind, ManualClassification, Medication, ReviewModel, SessionView } from '../shared/model';
+import { medicationIdentity } from '../shared/manual-classification';
 import { draftReadiness } from '../shared/validation';
 import './style.css';
 
@@ -75,6 +76,9 @@ function App() {
         if (m.id !== id) return m;
         const updated = { ...m, [field]: value };
         if (field === 'dosageText') updated.certificateDosageText = value.length <= 88 ? value : '';
+        if (['productName', 'strength', 'form', 'activeSubstance'].includes(field) && updated.manualClassification) {
+          updated.manualClassification = { ...updated.manualClassification, verifiedIdentity: '' };
+        }
         if (field === 'productName' || field === 'strength' || field === 'form') {
           const substancePath = `medications.${id}.activeSubstance`, atcPath = `medications.${id}.atcCode`;
           if (fieldEvidence[substancePath]?.method === 'reference' && !edited.has(substancePath)) { updated.activeSubstance = ''; updated.confidence = { ...updated.confidence, activeSubstance: 0 }; delete fieldEvidence[substancePath]; }
@@ -97,6 +101,12 @@ function App() {
   function changePrescriber(id: string, key: keyof Medication['prescriber'], value: string) {
     setReview(previous => previous && ({ ...previous, medications: previous.medications.map(m => m.id === id ? { ...m, prescriber: { ...m.prescriber, [key]: value }, prescriberSourceIds: { ...m.prescriberSourceIds, [key]: undefined } } : m) }));
     markEdited(`medications.${id}.prescriber.${key}`);
+  }
+  function changeManualClassification(id: string, patch: Partial<ManualClassification>) {
+    setReview(previous => previous && ({ ...previous, medications: previous.medications.map(m => m.id === id ? {
+      ...m, manualClassification: { status: '', sourceUrl: '', rationale: '', reviewer: '', verifiedIdentity: '', ...m.manualClassification, ...patch },
+    } : m) }));
+    markEdited(`medications.${id}.manualClassification`);
   }
   function copyPrescriber(id: string) {
     setReview(previous => {
@@ -183,10 +193,21 @@ function App() {
         </div>
         <section className="medications"><div className="section-head"><div><span className="step">04 / MANUELL GRANSKNING</span><h2>Identifierade preparat</h2></div><p>Osäkra eller saknade fält fylls i här. Förskrivare anges per preparat.</p></div>{review.medications.length === 0 && <p className="warning">Inga läkemedelsrader kunde tolkas. Lägg till en rad manuellt och jämför med bilden.</p>}
           {review.medications.map((m, index) => <article className="med-card" key={m.id}>
-            <div className="med-heading"><span className="med-number">{String(index + 1).padStart(2, '0')}</span><div><h3>{m.productName || 'Namnlöst preparat'}</h3><small>{m.originalText ? `Föreslagen rad: ${m.originalText}` : 'Manuellt tillagd rad'}</small></div><span className={`class-badge ${m.classification.status}`}>{dirty ? 'Klassning väntar på granskning' : m.classification.status === 'required' ? m.classification.sourceUrls?.length ? 'Intyg enligt pilotpost' : 'Intyg enligt demo-regel' : m.classification.status === 'not-required' ? 'Inget intyg enligt demo-regel' : 'Osäker klassning'}</span><button className="remove-med" onClick={() => removeMedication(m.id)}>Ta bort</button></div>
+            <div className="med-heading"><span className="med-number">{String(index + 1).padStart(2, '0')}</span><div><h3>{m.productName || 'Namnlöst preparat'}</h3><small>{m.originalText ? `Föreslagen rad: ${m.originalText}` : 'Manuellt tillagd rad'}</small></div><span className={`class-badge ${m.classification.status}`}>{dirty ? 'Klassning väntar på granskning' : m.classification.referenceVersion === 'manual-review' ? m.classification.status === 'required' ? 'Intyg: manuellt granskat' : 'Inget intyg: manuellt granskat' : m.classification.status === 'required' ? m.classification.sourceUrls?.length ? 'Intyg enligt pilotpost' : 'Intyg enligt demo-regel' : m.classification.status === 'not-required' ? 'Inget intyg enligt demo-regel' : 'Osäker klassning'}</span><button className="remove-med" onClick={() => removeMedication(m.id)}>Ta bort</button></div>
             <div className="med-fields">{fields.map(([key, label, confidence]) => { const path = `medications.${m.id}.${key}`, source = review.fieldEvidence[path], sourceDocument = session.documents.find(d => d.id === source?.documentId); return <label key={key}>{label}{confidence && <span className={m.confidence[confidence] < 0.8 ? 'confidence low' : 'confidence'}>{source?.method === 'mock-fixture' ? 'Ej bildläst' : source?.method === 'reference' ? 'Register' : source ? `${Math.round(m.confidence[confidence] * 100)} %` : 'Osäkert'}</span>}<input value={m[key]} maxLength={key === 'certificateDosageText' ? 88 : undefined} onChange={e => changeMedication(m.id, key, e.target.value)} onFocus={() => { if (sourceDocument) setSelectedDocument(sourceDocument.id); }} placeholder={key === 'certificateDosageText' ? 'Skriv en kort och korrekt dosering för blanketten' : 'Ej känt — fyll i manuellt'} autoComplete="off"/><small className="field-source">{key === 'certificateDosageText' ? `${m.certificateDosageText.length}/88 tecken · Kontrollera mot fullständig dosering ovan` : <>{edited.has(path) ? 'Korrigerat · ' : ''}{source?.method === 'mock-fixture' ? 'Mockfixture, ingen bildkälla' : source?.method === 'reference' ? `Produktreferens: ${source.rawText}` : sourceDocument ? `Källa: ${sourceDocument.name}` : 'Fylls i manuellt'}</>}</small></label>; })}</div>
+            {(m.classification.status === 'unknown' || m.manualClassification) && <div className="manual-classification">
+              <h4>Manuell farmaceutisk klassning</h4>
+              <p>Kontrollera exakt expedierat preparat, styrka med enhet, form och substans mot en aktuell produkt- eller klassningskälla. Ett substansnamn ensamt kan vara otillräckligt som preparatnamn på intyget.</p>
+              <div className="form-grid">
+                <label>Beslut<select value={m.manualClassification?.status ?? ''} onChange={e => changeManualClassification(m.id, { status: e.target.value as ManualClassification['status'] })}><option value="">Välj efter kontroll</option><option value="required">Kräver Schengenintyg</option><option value="not-required">Kräver inte Schengenintyg</option></select></label>
+                <label>Källa från FASS eller Läkemedelsverket<input type="url" value={m.manualClassification?.sourceUrl ?? ''} onChange={e => changeManualClassification(m.id, { sourceUrl: e.target.value })} placeholder="https://fass.se/health/product/..." autoComplete="off"/><small className="field-source">Länk till kontrollerad produkt eller klassning.</small></label>
+                <label>Motivering<input value={m.manualClassification?.rationale ?? ''} onChange={e => changeManualClassification(m.id, { rationale: e.target.value })} placeholder="Ange klass och hur exakt preparat verifierades" autoComplete="off"/></label>
+                <label>Farmaceutens signum eller namn<input value={m.manualClassification?.reviewer ?? ''} onChange={e => changeManualClassification(m.id, { reviewer: e.target.value })} autoComplete="off"/></label>
+              </div>
+              <label className="manual-confirm"><input type="checkbox" checked={!!m.manualClassification?.verifiedIdentity && m.manualClassification.verifiedIdentity === medicationIdentity(m)} onChange={e => changeManualClassification(m.id, { verifiedIdentity: e.target.checked ? medicationIdentity(m) : '' })}/> Jag har kontrollerat att preparat, styrka, form och substans ovan motsvarar det expedierade läkemedlet och källan.</label>
+            </div>}
             <div className="prescriber-block"><div className="prescriber-heading"><h4>A. Förskrivare för detta preparat</h4><button onClick={() => copyPrescriber(m.id)}>Använd samma förskrivare på alla</button></div>{review.prescriberCandidates.length > 0 && <div className="candidate-list">{review.prescriberCandidates.map(c => <div key={c.id}><span>Bildförslag: {[c.prescriber.firstName, c.prescriber.lastName].filter(Boolean).join(' ') || 'Inget namn i bilden'}{c.workplaceName && ` · ${c.workplaceName}`}<small>Arbetsplatsens telefon: {c.workplacePhone || 'ej läst'} · Direkttelefon: {c.prescriber.phone && c.prescriber.phone !== c.workplacePhone ? c.prescriber.phone : 'ej läst'}</small></span><div className="candidate-actions"><button onClick={() => { usePrescriberCandidate(m.id, c.id); setSelectedDocument(c.documentId); }}>Använd</button><button onClick={() => { usePrescriberCandidate(m.id, c.id, true); setSelectedDocument(c.documentId); }}>Fyll tomma fält</button></div></div>)}</div>}<div className="form-grid">{prescriberFields.map(([key, label]) => { const candidate = review.prescriberCandidates.find(c => c.id === m.prescriberSourceIds?.[key]), source = candidate?.evidence[key], workplaceNumber = key === 'phone' && candidate && candidate.workplacePhone === m.prescriber.phone; return <label key={key}>{label}{source && <span className={source.confidence < .9 ? 'confidence low' : 'confidence'}>{Math.round(source.confidence * 100)} %</span>}<input value={m.prescriber[key]} onChange={e => changePrescriber(m.id, key, e.target.value)} onFocus={() => { if (source?.documentId) setSelectedDocument(source.documentId); }} placeholder="Ange manuellt" autoComplete="off"/><small className="field-source">{edited.has(`medications.${m.id}.prescriber.${key}`) ? 'Korrigerat manuellt' : source ? workplaceNumber ? 'Arbetsplatsens telefon från bild – kontrollera' : 'OCR-förslag från bild – kontrollera' : m.prescriber[key] ? 'Kontrollera mot bild' : 'Fylls i manuellt'}</small></label>; })}</div></div>
-            <p className="reason"><b>Regelmotorns motivering:</b> {m.classification.reason} <small>({m.classification.referenceVersion})</small>{m.classification.sourceUrls?.map((url, i) => <a key={url} href={url} target="_blank" rel="noreferrer">{i === 0 ? 'FASS-produkt' : 'LV-föreskrift'}</a>)}</p>
+            <p className="reason"><b>{m.classification.referenceVersion === 'manual-review' ? 'Farmaceutens beslut:' : 'Regelmotorns motivering:'}</b> {m.classification.reason} <small>({m.classification.referenceVersion})</small>{m.classification.sourceUrls?.map((url, i) => <a key={url} href={url} target="_blank" rel="noreferrer">{m.classification.referenceVersion === 'manual-review' ? 'Granskad källa' : i === 0 ? 'FASS-produkt' : 'LV-föreskrift'}</a>)}</p>
           </article>)}<button className="add-med" onClick={addMedication} disabled={review.medications.length >= 30}>+ Lägg till läkemedel manuellt</button>
         </section>
         <section className="output panel"><div><span className="step">05 / UTKAST</span><h2>Separata PDF:er</h2><p>En PDF per preparat som demo-regeln markerar. Den officiella blanketten fylls som demo-utkast; signatur och stämpel lämnas tomma.</p>{readinessIssues.map((issue, i) => <p className="warning" key={i}>{issue}</p>)}</div>

@@ -63,6 +63,7 @@ export class MedicationNormalizer implements Normalizer {
         prescriber: { lastName: '', firstName: '', address: '', phone: '' },
         prescriberCandidateId: null,
         prescriberSourceIds: {},
+        manualClassification: null,
         confidence, classification: { status: 'unknown', reason: 'Ej klassificerad', referenceVersion: 'demo-1' },
       } satisfies Medication;
     });

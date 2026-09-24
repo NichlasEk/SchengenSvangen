@@ -1,5 +1,6 @@
 export type Confidence = { productName: number; strength: number; form: number; activeSubstance: number; dosage: number; quantity: number };
 export type Classification = { status: 'required' | 'not-required' | 'unknown'; reason: string; referenceVersion: string; sourceUrls?: string[] };
+export type ManualClassification = { status: '' | 'required' | 'not-required'; sourceUrl: string; rationale: string; reviewer: string; verifiedIdentity: string };
 export type DocumentKind = 'patient' | 'medications' | 'prescriber';
 export type DocumentInfo = { id: string; kind: DocumentKind; name: string; mimeType: string };
 export type FieldEvidence = { documentId: string | null; method: 'mock-fixture' | 'ocr' | 'reference'; rawText: string; confidence: number; bounds?: { x: number; y: number; width: number; height: number } };
@@ -13,12 +14,13 @@ export type Medication = {
   prescriber: Prescriber;
   prescriberCandidateId: string | null;
   prescriberSourceIds: Partial<Record<keyof Prescriber, string>>;
+  manualClassification: ManualClassification | null;
   confidence: Confidence; classification: Classification;
 };
 export function blankMedication(id: string): Medication {
   return { id, originalText: '', productName: '', strength: '', form: '', activeSubstance: '', atcCode: '',
     dosageText: '', certificateDosageText: '', quantity: '', totalActiveSubstance: '', treatmentDays: '', notes: '',
-    prescriber: { lastName: '', firstName: '', address: '', phone: '' }, prescriberCandidateId: null, prescriberSourceIds: {},
+    prescriber: { lastName: '', firstName: '', address: '', phone: '' }, prescriberCandidateId: null, prescriberSourceIds: {}, manualClassification: null,
     confidence: { productName: 0, strength: 0, form: 0, activeSubstance: 0, dosage: 0, quantity: 0 },
     classification: { status: 'unknown', reason: 'Manuellt tillagd rad. Klassning sker vid bekräftad granskning.', referenceVersion: 'demo-1' } };
 }

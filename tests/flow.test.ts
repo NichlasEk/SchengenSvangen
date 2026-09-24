@@ -75,6 +75,9 @@ test('långa doseringsanvisningar bevaras men kräver separat kort text på blan
   assert.match(draftReadiness(review).join(' '), /kort dosering/);
   medication.certificateDosageText = '1 tablett varje morgon';
   assert.deepEqual(draftReadiness(review), []);
+  medication.totalActiveSubstance = '50';
+  assert.match(draftReadiness(review).join(' '), /med enhet/);
+  medication.totalActiveSubstance = '50 mg';
   medication.certificateDosageText = 'A'.repeat(89);
   assert.match(draftReadiness(review).join(' '), /Dosering 19: 89 tecken/);
   medication.certificateDosageText = '1 tablett varje morgon';
